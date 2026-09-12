@@ -50,54 +50,55 @@ hyprlayout/
 - **Test**: monitors appear as colored rects, draggable, centered in window
 
 ### Phase 3 — Snapping & attraction
-- [ ] `core/snap.lua` — 8-point reference, snap weights, `_snap_to_best_non_overlapping`
-- [ ] Snap on release (collision → nearest non-overlapping position)
-- [ ] Attraction mode (toggle: snap to nearest even without collision)
+- [x] `core/snap.lua` — 8-point reference, snap weights, `_snap_to_best_non_overlapping`
+- [x] Snap on release (collision → nearest non-overlapping position)
+- [x] Attraction (always active: snap to nearest even without collision, within 300px)
 - [ ] Anchor detection + propagation on resize
 - **Test**: drag a monitor next to another → snaps to edge; resize → neighbors follow
 
 ### Phase 4 — Full widget set
-- [ ] `widgets/button.lua` — colored rect + label, click handler, hover highlight
-- [ ] `widgets/label.lua` — text display
-- [ ] `widgets/dropdown.lua` — expandable list (resolutions, frequencies, profiles, rotation)
-- [ ] `widgets/slider.lua` — scale ratio
-- [ ] `widgets/toggle.lua` — attraction mode on/off
-- [ ] `widgets/textinput.lua` — profile naming (already prototyped)
+- [x] `widgets/button.lua` — colored rect + label, click handler, hover highlight
+- [x] `widgets/label.lua` — text display
+- [x] `widgets/dropdown.lua` — expandable list (resolutions, frequencies, profiles, rotation)
+- [x] `widgets/toggle.lua` — power on/off
+- [ ] `widgets/slider.lua` — scale ratio (using dropdown instead)
+- [ ] `widgets/textinput.lua` — profile naming
 - [ ] `widgets/modal.lua` — overlay + centered panel
 - **Test**: side panel renders with all controls; dropdowns expand/collapse
 
 ### Phase 5 — Side panel + per-screen settings
-- [ ] Panel layout (top bar: profiles, buttons; right panel: screen settings)
-- [ ] Resolution dropdown (sorted, from available modes)
-- [ ] Frequency dropdown (filtered by resolution)
-- [ ] Rotation dropdown (0-7)
-- [ ] Scale slider (1.0, 1.5, 2.0, ...)
-- [ ] On/off toggle for screen
-- [ ] Status bar (selected screen name / error messages)
+- [x] Panel layout (right panel: screen settings, profiles, apply)
+- [x] Resolution dropdown (sorted, from available modes)
+- [x] Frequency dropdown (filtered by resolution)
+- [x] Rotation dropdown (0-5)
+- [x] Scale dropdown (0.5-2.0)
+- [x] On/off toggle for screen
+- [x] Status bar (selected screen name / error messages)
 - **Test**: click a monitor → panel updates; change resolution → rect resizes
 
 ### Phase 6 — Profiles
-- [ ] `core/profiles.lua` — save/load Lua table files to `~/.config/hyprlayout/profiles.lua`
-- [ ] Profile list dropdown
-- [ ] New/Save/Load/Delete buttons
+- [x] `core/profiles.lua` — save/load Lua table files to `~/.config/hyprlayout/profiles/*.lua`
+- [x] Profile list dropdown
+- [x] Save/Load/New buttons
+- [ ] Delete button
 - [ ] TAB key cycles profiles
 - **Test**: save layout → close → reopen → load profile → layout restored
 
 ### Phase 7 — Apply layout
-- [ ] Generate `hyprctl` / `wlr-randr` / `xrandr` commands from current rects
-- [ ] `trim_rects_flip_y` normalization
+- [x] Generate `hyprctl eval` commands from current rects
+- [x] `trim_rects_flip_y` normalization
 - [ ] Confirmation countdown (20s, progress bar, ENTER to confirm / ESC to abort)
-- [ ] Reload button (re-read current state)
-- **Test**: click Apply → countdown → layout applied on the system
+- [x] Reload button (R key, re-read current state)
+- **Test**: click Apply → layout applied on the system
 
 ### Phase 8 — Polish
-- [ ] Smooth animation (lerp rect toward target_rect, 8-frame easing)
+- [x] Smooth animation (lerp rect toward target_rect, 8-frame easing)
 - [ ] Screenshot previews (background thread → love.thread)
 - [ ] UI scale slider
-- [ ] Screen scale (global ratio for canvas)
+- [x] Screen scale (global ratio for canvas, SCREEN_SCALE=8)
 - [ ] Keyboard shortcuts (ENTER=apply, ESC=cancel, TAB=next profile)
-- [ ] Error message display (red text, auto-dismiss)
-- [ ] Window resize handling (re-center, re-layout panel)
+- [x] Error message display (status label in panel)
+- [x] Window resize handling (re-center, re-layout panel)
 - [ ] Hyprland window rules (WM class / title)
 
 ## Key Design Decisions
