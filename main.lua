@@ -115,7 +115,13 @@ local function load_screens()
     if screen.mode then
       w, h = get_screen_size(screen)
     else
-      w, h = 100, 100
+      local max_w, max_h = 1920, 1080
+      for _, m in ipairs(screen.available) do
+        max_w = math.max(max_w, m.width)
+        max_h = math.max(max_h, m.height)
+      end
+      w = math.floor(max_w / SCREEN_SCALE / screen.scale)
+      h = math.floor(max_h / SCREEN_SCALE / screen.scale)
     end
     local rect = Rect.new(
       math.floor(x / SCREEN_SCALE),
