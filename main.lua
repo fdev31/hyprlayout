@@ -9,7 +9,6 @@ local gui_screens = {}
 local selected = nil
 local dragging = false
 local drag_offset = { 0, 0 }
-local placement_mode = false
 local status_msg = ""
 local status_timer = 0
 local panel = Panel.new()
@@ -63,9 +62,7 @@ end
 
 local function on_release_snap()
   snap.snap_active_screen(gui_screens)
-  if placement_mode then
-    snap.attract_screens(gui_screens)
-  end
+  snap.attract_screens(gui_screens)
   center_layout()
 end
 
@@ -161,8 +158,8 @@ function love.draw()
 
   panel:draw()
 
-  local info = string.format("hyprlayout | %d screens | drag to move | P=placement %s | R=reload ESC=quit",
-    #gui_screens, placement_mode and "ON" or "off")
+  local info = string.format("hyprlayout | %d screens | drag to move | R=reload ESC=quit",
+    #gui_screens)
   love.graphics.setColor(0.8, 0.8, 0.8)
   love.graphics.print(info, 10, 10)
 
@@ -221,9 +218,5 @@ function love.keypressed(key)
     load_screens()
     center_layout(true)
     panel:set_screen(nil)
-  elseif key == "p" then
-    placement_mode = not placement_mode
-    status_msg = "Placement mode: " .. (placement_mode and "ON" or "OFF")
-    status_timer = 2
   end
 end
