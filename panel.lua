@@ -42,7 +42,7 @@ end
 function PANEL.new()
   local self = setmetatable({}, PANEL)
   self.widgets = {}
-  self.visible = false
+  self.visible = true
   self.selected_gs = nil
   return self
 end
@@ -165,10 +165,15 @@ end
 function PANEL:set_screen(gs, scale_factor)
   self.selected_gs = gs
   if not gs then
-    self.visible = false
+    self.screen_name:set_text("(no screen selected)")
+    for _, w in ipairs(self.widgets) do
+      w.enabled = false
+    end
     return
   end
-  self.visible = true
+  for _, w in ipairs(self.widgets) do
+    w.enabled = true
+  end
   local screen = gs.screen
 
   self.screen_name:set_text(screen.name)

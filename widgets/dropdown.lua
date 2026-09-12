@@ -41,7 +41,7 @@ end
 
 function Dropdown:set_options(options)
   self.options = options
-  if self.selected_index >= #options then
+  if self.selected_index > #options then
     self.selected_index = 0
   end
 end
