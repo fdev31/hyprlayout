@@ -59,8 +59,7 @@ function M.make_commands(gui_screens)
   return { 'hyprctl eval "' .. joined .. '"' }
 end
 
-function M.apply(gui_screens)
-  local cmds = M.make_commands(gui_screens)
+function M.run_commands(cmds)
   for _, cmd in ipairs(cmds) do
     print("Running: " .. cmd)
     local f = io.popen(cmd .. " 2>&1")
@@ -70,6 +69,11 @@ function M.apply(gui_screens)
       print(out)
     end
   end
+end
+
+function M.apply(gui_screens)
+  local cmds = M.make_commands(gui_screens)
+  M.run_commands(cmds)
   return true
 end
 

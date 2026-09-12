@@ -1,10 +1,13 @@
 local screens = require("core.screens")
 local Rect = require("core.rect")
 local snap = require("core.snap")
+local anchors = require("core.anchors")
 local GuiScreen = require("gui_screen")
 local Panel = require("panel")
+local apply = require("core.apply")
 
 local SCREEN_SCALE = 8
+local CONFIRM_DELAY = 20
 local gui_screens = {}
 local selected = nil
 local dragging = false
@@ -13,6 +16,9 @@ local status_msg = ""
 local status_timer = 0
 local panel = Panel.new()
 local panel_w = 280
+local confirm_start = 0
+local original_cmd = nil
+local anchor_data = {}
 
 local function get_screen_size(screen)
   if not screen.mode then
@@ -64,10 +70,32 @@ local function on_release_snap()
   snap.snap_active_screen(gui_screens)
   snap.attract_screens(gui_screens)
   center_layout()
+  anchor_data = anchors.detect(gui_screens)
 end
 
 local function on_screen_changed()
   center_layout()
+  anchor_data = anchors.detect(gui_screens)
+end
+
+local function on_screen_resized(gs, old_w, old_h)
+  anchors.propagate(gui_screens, anchor_data, gs, old_w, old_h)
+  center_layout()
+  anchor_data = anchors.detect(gui_screens)
+end
+
+local function set_current_modes_as_ref()
+  original_cmd = apply.make_commands(gui_screens)
+end
+
+local function action_apply()
+  local cmds = apply.make_commands(gui_screens)
+  if #cmds > 0 then
+    apply.run_commands(cmds)
+    confirm_start = os.clock()
+    status_msg = "Layout applied! Press ENTER to confirm or ESC to revert (" .. CONFIRM_DELAY .. "s)"
+    status_timer = CONFIRM_DELAY
+  end
 end
 
 local function load_screens()
@@ -100,6 +128,7 @@ local function load_screens()
   end
 
   center_layout(true)
+  anchor_data = anchors.detect(gui_screens)
 end
 
 local function layout_panel()
@@ -108,7 +137,9 @@ local function layout_panel()
   panel:layout(win_w, win_h)
   panel.get_all_screens = function() return gui_screens end
   panel.on_screen_changed = on_screen_changed
+  panel.on_screen_resized = on_screen_resized
   panel.on_center = function() center_layout(true) end
+  panel.on_apply_callback = function() action_apply() end
   panel:update_profiles()
   if selected then
     panel:set_screen(selected)
@@ -119,6 +150,7 @@ function love.load()
   math.randomseed(os.time())
   load_screens()
   layout_panel()
+  set_current_modes_as_ref()
 end
 
 function love.resize(w, h)
@@ -134,6 +166,21 @@ function love.update(dt)
     status_timer = status_timer - dt
     if status_timer <= 0 then
       status_msg = ""
+    end
+  end
+  if confirm_start > 0 then
+    local elapsed = os.clock() - confirm_start
+    if elapsed >= CONFIRM_DELAY then
+      if original_cmd and #original_cmd > 0 then
+        apply.run_commands(original_cmd)
+      end
+      confirm_start = 0
+      load_screens()
+      center_layout(true)
+      panel:set_screen(nil)
+      set_current_modes_as_ref()
+      status_msg = "Timed out - reverted"
+      status_timer = 3
     end
   end
 end
@@ -158,14 +205,31 @@ function love.draw()
 
   panel:draw()
 
-  local info = string.format("hyprlayout | %d screens | drag to move | R=reload ESC=quit",
-    #gui_screens)
-  love.graphics.setColor(0.8, 0.8, 0.8)
-  love.graphics.print(info, 10, 10)
+  if confirm_start > 0 then
+    local elapsed = os.clock() - confirm_start
+    local remaining = CONFIRM_DELAY - elapsed
+    local ratio = remaining / CONFIRM_DELAY
+    local win_w = love.graphics.getWidth()
+    local win_h = love.graphics.getHeight()
 
-  if status_msg ~= "" then
-    love.graphics.setColor(1, 0.9, 0.5)
-    love.graphics.print(status_msg, 10, 30)
+    local bar_color_r = 50 + math.floor(200 * (1.0 - ratio)) / 255
+    local bar_color_g = math.floor(200 * ratio) / 255
+    love.graphics.setColor(bar_color_r, bar_color_g, 0.4)
+    love.graphics.rectangle("fill", 0, math.floor(win_h / 2) - 40, math.floor(win_w * ratio), 10)
+
+    love.graphics.setColor(0.8, 0.8, 0.8)
+    love.graphics.print("Press ENTER", 20, math.floor(win_h / 2) + 40)
+    love.graphics.print("to confirm (or ESC to abort)", 20, math.floor(win_h / 2))
+  else
+    local info = string.format("hyprlayout | %d screens | drag to move | ENTER=apply R=reload TAB=profile ESC=quit",
+      #gui_screens)
+    love.graphics.setColor(0.8, 0.8, 0.8)
+    love.graphics.print(info, 10, 10)
+
+    if status_msg ~= "" then
+      love.graphics.setColor(1, 0.9, 0.5)
+      love.graphics.print(status_msg, 10, 30)
+    end
   end
 end
 
@@ -211,12 +275,51 @@ function love.mousereleased(x, y, button)
   dragging = false
 end
 
+function love.textinput(txt)
+  if panel:text_input(txt) then
+    return
+  end
+end
+
+function love.keyreleased(key)
+end
+
 function love.keypressed(key)
-  if key == "escape" then
-    love.event.quit()
+  if panel:modal_keypressed(key) then
+    return
+  end
+  if key == "return" or key == "kpenter" then
+    if confirm_start > 0 then
+      confirm_start = 0
+      set_current_modes_as_ref()
+      status_msg = ""
+      status_timer = 0
+    else
+      action_apply()
+    end
+  elseif key == "escape" then
+    if confirm_start > 0 then
+      if original_cmd and #original_cmd > 0 then
+        apply.run_commands(original_cmd)
+      end
+      confirm_start = 0
+      load_screens()
+      center_layout(true)
+      panel:set_screen(nil)
+      set_current_modes_as_ref()
+      status_msg = "Reverted"
+      status_timer = 3
+    else
+      love.event.quit()
+    end
+  elseif key == "tab" then
+    if panel:cycle_profile() then
+      panel:load_profile()
+    end
   elseif key == "r" then
     load_screens()
     center_layout(true)
     panel:set_screen(nil)
+    set_current_modes_as_ref()
   end
 end

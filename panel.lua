@@ -3,6 +3,7 @@ local Button = require("widgets.button")
 local Dropdown = require("widgets.dropdown")
 local Label = require("widgets.label")
 local Toggle = require("widgets.toggle")
+local Modal = require("widgets.modal")
 local profiles = require("core.profiles")
 local apply = require("core.apply")
 
@@ -37,6 +38,52 @@ local function sorted_frequencies(available, w, h)
   end
   table.sort(freqs, function(a, b) return a > b end)
   return freqs
+end
+
+local function find_matching_mode(available, w, h, freq)
+  for _, m in ipairs(available) do
+    if m.width == w and m.height == h and math.abs(m.freq - freq) < 0.1 then
+      return m
+    end
+  end
+  local best = nil
+  local best_diff = math.huge
+  for _, m in ipairs(available) do
+    if m.width == w and m.height == h then
+      local diff = math.abs(m.freq - freq)
+      if diff < best_diff then
+        best_diff = diff
+        best = m
+      end
+    end
+  end
+  return best
+end
+
+local function get_closest_match(values, target)
+  local best_idx = 1
+  local best_diff = math.huge
+  for i, v in ipairs(values) do
+    local diff = math.abs(v - target)
+    if diff < best_diff then
+      best_diff = diff
+      best_idx = i
+    end
+  end
+  return best_idx
+end
+
+local function simplify_model_name(name)
+  local words = {}
+  local seen = {}
+  for word in name:gmatch("%S+") do
+    local lower = word:lower()
+    if not seen[lower] and not word:match("^%x+$") then
+      seen[lower] = true
+      table.insert(words, word)
+    end
+  end
+  return table.concat(words, " ")
 end
 
 function PANEL.new()
@@ -132,10 +179,15 @@ function PANEL:layout(win_w, win_h)
   })
   y = y + ROW_H + 5
 
-  local bw = math.floor((cw - 2 * MARGIN) / 3)
+  local bw = math.floor((cw - 3 * MARGIN) / 4)
   self.btn_save = Button.new(x, y, bw, ROW_H, "Save", { on_click = function() self:on_save_profile() end })
   self.btn_load = Button.new(x + bw + MARGIN, y, bw, ROW_H, "Load", { on_click = function() self:on_load_profile() end })
   self.btn_new = Button.new(x + 2 * (bw + MARGIN), y, bw, ROW_H, "New", { on_click = function() self:on_new_profile() end })
+  self.btn_delete = Button.new(x + 3 * (bw + MARGIN), y, bw, ROW_H, "Del", {
+    color = { 0.5, 0.2, 0.2 },
+    hover_color = { 0.6, 0.25, 0.25 },
+    on_click = function() self:on_delete_profile() end,
+  })
   y = y + ROW_H + 15
 
   -- Apply section
@@ -157,7 +209,7 @@ function PANEL:layout(win_w, win_h)
   self.widgets = {
     self.resolutions, self.frequencies, self.scale, self.rotation,
     self.power, self.profiles_dd,
-    self.btn_save, self.btn_load, self.btn_new,
+    self.btn_save, self.btn_load, self.btn_new, self.btn_delete,
     self.btn_apply, self.btn_center,
   }
 end
@@ -176,7 +228,7 @@ function PANEL:set_screen(gs, scale_factor)
   end
   local screen = gs.screen
 
-  self.screen_name:set_text(screen.name)
+  self.screen_name:set_text(simplify_model_name(screen.name))
 
   -- Resolutions
   local res = sorted_resolutions(screen.available)
@@ -196,13 +248,7 @@ function PANEL:set_screen(gs, scale_factor)
 
   -- Scale
   local scale_vals = { 0.5, 0.75, 1.0, 1.25, 1.5, 2.0 }
-  local best_scale_idx = 1
-  for i, s in ipairs(scale_vals) do
-    if math.abs(s - screen.scale) < 0.01 then
-      best_scale_idx = i
-    end
-  end
-  self.scale.selected_index = best_scale_idx
+  self.scale.selected_index = get_closest_match(scale_vals, screen.scale)
 
   -- Rotation
   self.rotation.selected_index = screen.transform + 1
@@ -258,8 +304,8 @@ function PANEL:on_resolution_change()
   gs.target_rect.width = new_w
   gs.target_rect.height = new_h
   self:update_frequencies()
-  if self.on_screen_changed then
-    self.on_screen_changed()
+  if self.on_screen_resized then
+    self.on_screen_resized(gs, old_w, old_h)
   end
 end
 
@@ -272,6 +318,7 @@ function PANEL:on_scale_change()
   screen.scale = opt.value
   local SCREEN_SCALE = 8
   if screen.mode then
+    local old_w, old_h = gs.target_rect.width, gs.target_rect.height
     local new_w = math.floor(screen.mode.width / SCREEN_SCALE / screen.scale)
     local new_h = math.floor(screen.mode.height / SCREEN_SCALE / screen.scale)
     if screen.transform % 2 == 1 then
@@ -279,8 +326,8 @@ function PANEL:on_scale_change()
     end
     gs.target_rect.width = new_w
     gs.target_rect.height = new_h
-    if self.on_screen_changed then
-      self.on_screen_changed()
+    if self.on_screen_resized then
+      self.on_screen_resized(gs, old_w, old_h)
     end
   end
 end
@@ -294,6 +341,7 @@ function PANEL:on_rotation_change()
   screen.transform = opt.value
   local SCREEN_SCALE = 8
   if screen.mode then
+    local old_w, old_h = gs.target_rect.width, gs.target_rect.height
     local new_w = math.floor(screen.mode.width / SCREEN_SCALE / screen.scale)
     local new_h = math.floor(screen.mode.height / SCREEN_SCALE / screen.scale)
     if screen.transform % 2 == 1 then
@@ -301,8 +349,8 @@ function PANEL:on_rotation_change()
     end
     gs.target_rect.width = new_w
     gs.target_rect.height = new_h
-    if self.on_screen_changed then
-      self.on_screen_changed()
+    if self.on_screen_resized then
+      self.on_screen_resized(gs, old_w, old_h)
     end
   end
 end
@@ -380,14 +428,20 @@ function PANEL:on_load_profile()
         gs.screen.scale = saved.scale or 1
         gs.screen.transform = saved.transform or 0
         if saved.mode then
-          gs.screen.mode = {
-            width = saved.mode.width,
-            height = saved.mode.height,
-            freq = saved.mode.freq,
-          }
+          local mode = find_matching_mode(gs.screen.available, saved.mode.width, saved.mode.height, saved.mode.freq)
+          if mode then
+            gs.screen.mode = mode
+          else
+            gs.screen.mode = {
+              width = saved.mode.width,
+              height = saved.mode.height,
+              freq = saved.mode.freq,
+            }
+            self.status:set_text("No matching mode for " .. gs.screen.uid)
+          end
           local SCREEN_SCALE = 8
-          local new_w = math.floor(saved.mode.width / SCREEN_SCALE / gs.screen.scale)
-          local new_h = math.floor(saved.mode.height / SCREEN_SCALE / gs.screen.scale)
+          local new_w = math.floor(gs.screen.mode.width / SCREEN_SCALE / gs.screen.scale)
+          local new_h = math.floor(gs.screen.mode.height / SCREEN_SCALE / gs.screen.scale)
           if gs.screen.transform % 2 == 1 then
             new_w, new_h = new_h, new_w
           end
@@ -409,16 +463,52 @@ function PANEL:on_load_profile()
 end
 
 function PANEL:on_new_profile()
-  self.profiles_dd.selected_index = 0
-  self.profiles_dd.options = {}
-  self.status:set_text("Make changes then Save")
+  if not self._modal then
+    local win_w = love.graphics.getWidth()
+    local win_h = love.graphics.getHeight()
+    self._modal = Modal.new(win_w, win_h, "New Profile Name", "Profile name",
+      function(text)
+        self.profiles_dd.selected_index = 0
+        self.profiles_dd.options = { { name = text, value = text } }
+        self.status:set_text("Save as: " .. text)
+      end,
+      function()
+      end
+    )
+  end
+  self._modal:show()
+end
+
+function PANEL:on_delete_profile()
+  local name = self.profiles_dd:get_selected_name()
+  if name == "" or name == "(no profiles)" then
+    self.status:set_text("No profile selected")
+    return
+  end
+  profiles.delete_profile(name)
+  self:update_profiles()
+  self.status:set_text("Deleted: " .. name)
+end
+
+function PANEL:cycle_profile()
+  local opts = self.profiles_dd.options
+  if not opts or #opts == 0 then return false end
+  local idx = self.profiles_dd.selected_index + 1
+  if idx > #opts then
+    idx = 1
+  end
+  self.profiles_dd.selected_index = idx
+  return true
+end
+
+function PANEL:load_profile()
+  self:on_load_profile()
 end
 
 function PANEL:on_apply()
-  local gs_list = self.get_all_screens and self.get_all_screens()
-  if not gs_list then return end
-  apply.apply(gs_list)
-  self.status:set_text("Applied!")
+  if self.on_apply_callback then
+    self.on_apply_callback()
+  end
 end
 
 function PANEL:draw()
@@ -443,6 +533,30 @@ function PANEL:draw()
   self.power_label:draw()
   self.profile_label:draw()
   self.status:draw()
+
+  if self._modal then
+    self._modal:draw()
+  end
+end
+
+function PANEL:text_input(txt)
+  if self._modal and self._modal:is_visible() then
+    self._modal:on_text(txt)
+    return true
+  end
+  return false
+end
+
+function PANEL:modal_keypressed(key)
+  if self._modal and self._modal:is_visible() then
+    self._modal:keypressed(key)
+    return true
+  end
+  return false
+end
+
+function PANEL:modal_visible()
+  return self._modal and self._modal:is_visible()
 end
 
 function PANEL:on_press(mx, my)
