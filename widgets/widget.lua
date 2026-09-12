@@ -11,6 +11,14 @@ function Widget.new(x, y, w, h)
   }, Widget)
 end
 
+function Widget:extend(name)
+  local cls = {}
+  cls.__index = cls
+  setmetatable(cls, { __index = Widget })
+  cls._name = name
+  return cls
+end
+
 function Widget:hit(mx, my)
   return self.visible and self.enabled and self.rect:contains(mx, my)
 end

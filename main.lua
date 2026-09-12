@@ -2,6 +2,7 @@ local screens = require("core.screens")
 local Rect = require("core.rect")
 local snap = require("core.snap")
 local GuiScreen = require("gui_screen")
+local Panel = require("panel")
 
 local SCREEN_SCALE = 8
 local gui_screens = {}
@@ -11,6 +12,8 @@ local drag_offset = { 0, 0 }
 local placement_mode = false
 local status_msg = ""
 local status_timer = 0
+local panel = Panel.new()
+local panel_w = 280
 
 local function get_screen_size(screen)
   if not screen.mode then
@@ -22,6 +25,10 @@ local function get_screen_size(screen)
     w, h = h, w
   end
   return w, h
+end
+
+local function canvas_w()
+  return love.graphics.getWidth() - panel_w - 20
 end
 
 local function center_layout(immediate)
@@ -39,8 +46,9 @@ local function center_layout(immediate)
 
   local avg_x = (min_x + max_x) / 2
   local avg_y = (min_y + max_y) / 2
-  local win_w, win_h = love.graphics.getWidth(), love.graphics.getHeight()
-  local off_x = math.floor(win_w / 2) - avg_x
+  local cw = canvas_w()
+  local win_h = love.graphics.getHeight()
+  local off_x = math.floor(cw / 2) - avg_x
   local off_y = math.floor(win_h / 2) - avg_y
 
   for _, gs in ipairs(gui_screens) do
@@ -58,6 +66,10 @@ local function on_release_snap()
   if placement_mode then
     snap.attract_screens(gui_screens)
   end
+  center_layout()
+end
+
+local function on_screen_changed()
   center_layout()
 end
 
@@ -93,9 +105,28 @@ local function load_screens()
   center_layout(true)
 end
 
+local function layout_panel()
+  local win_w = love.graphics.getWidth()
+  local win_h = love.graphics.getHeight()
+  panel:layout(win_w, win_h)
+  panel.get_all_screens = function() return gui_screens end
+  panel.on_screen_changed = on_screen_changed
+  panel.on_center = function() center_layout(true) end
+  panel:update_profiles()
+  if selected then
+    panel:set_screen(selected)
+  end
+end
+
 function love.load()
   math.randomseed(os.time())
   load_screens()
+  layout_panel()
+end
+
+function love.resize(w, h)
+  layout_panel()
+  center_layout(true)
 end
 
 function love.update(dt)
@@ -120,12 +151,15 @@ function love.draw()
       love.graphics.setColor(0.8, 0.8, 0.8)
       love.graphics.print(screens.error:sub(1, 500), 20, 50)
     end
+    panel:draw()
     return
   end
 
   for _, gs in ipairs(gui_screens) do
     gs:draw()
   end
+
+  panel:draw()
 
   local info = string.format("hyprlayout | %d screens | drag to move | P=placement %s | R=reload ESC=quit",
     #gui_screens, placement_mode and "ON" or "off")
@@ -141,11 +175,18 @@ end
 function love.mousemoved(x, y)
   if dragging and selected then
     selected:set_position(x - drag_offset[1], y - drag_offset[2])
+  else
+    panel:on_move(x, y)
   end
 end
 
 function love.mousepressed(x, y, button)
   if button ~= 1 then return end
+
+  -- Panel gets priority
+  if panel:on_press(x, y) then
+    return
+  end
 
   for i = #gui_screens, 1, -1 do
     local gs = gui_screens[i]
@@ -156,14 +197,17 @@ function love.mousepressed(x, y, button)
       drag_offset[2] = y - gs.rect.y
       gui_screens[i] = table.remove(gui_screens, i)
       table.insert(gui_screens, gs)
+      panel:set_screen(gs)
       return
     end
   end
   selected = nil
+  panel:set_screen(nil)
 end
 
 function love.mousereleased(x, y, button)
   if button ~= 1 then return end
+  panel:on_release(x, y)
   if dragging and selected then
     on_release_snap()
   end
@@ -176,6 +220,7 @@ function love.keypressed(key)
   elseif key == "r" then
     load_screens()
     center_layout(true)
+    panel:set_screen(nil)
   elseif key == "p" then
     placement_mode = not placement_mode
     status_msg = "Placement mode: " .. (placement_mode and "ON" or "OFF")
