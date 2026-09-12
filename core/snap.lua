@@ -10,7 +10,7 @@ M.SNAP_RADIUS = SNAP_RADIUS
 local function ref_points(r)
   local cx = r.x + r.width / 2
   local cy = r.y + r.height / 2
-  return {
+  local pts = {
     { {r.x, r.y}, {"left", "top"} },
     { {r.x + r.width, r.y}, {"right", "top"} },
     { {r.x + r.width, r.y + r.height}, {"right", "bottom"} },
@@ -19,7 +19,8 @@ local function ref_points(r)
     { {cx, r.y + r.height}, {"center_x", "bottom"} },
     { {r.x, cy}, {"left", "center_y"} },
     { {r.x + r.width, cy}, {"right", "center_y"} },
-  end
+  }
+  return pts
 end
 
 local function snap_weight(ac_types, oc_types)
@@ -105,35 +106,35 @@ function M.snap_to_best_non_overlapping(active, candidates, max_dist)
     local otr = other.target_rect
     local overlaps = ar.x < otr.x + otr.width and otr.x < ar.x + ar.width
       and ar.y < otr.y + otr.height and otr.y < ar.y + ar.height
-    if not overlaps then continue end
+    if overlaps then
+      local acx = ar.x + ar.width / 2
+      local acy = ar.y + ar.height / 2
+      local ocx = otr.x + otr.width / 2
+      local ocy = otr.y + otr.height / 2
+      local center_dx = acx - ocx
+      local center_dy = acy - ocy
 
-    local acx = ar.x + ar.width / 2
-    local acy = ar.y + ar.height / 2
-    local ocx = otr.x + otr.width / 2
-    local ocy = otr.y + otr.height / 2
-    local center_dx = acx - ocx
-    local center_dy = acy - ocy
+      local dx_push
+      if center_dx >= 0 then
+        dx_push = ar.x + ar.width - otr.x
+      else
+        dx_push = ar.x - (otr.x + otr.width)
+      end
+      if dx_push ~= 0 and test_no_overlap(ar, dx_push, 0, active) then
+        ar.x = ar.x - dx_push
+        return true
+      end
 
-    local dx_push
-    if center_dx >= 0 then
-      dx_push = ar.x + ar.width - otr.x
-    else
-      dx_push = ar.x - (otr.x + otr.width)
-    end
-    if dx_push ~= 0 and test_no_overlap(ar, dx_push, 0, active) then
-      ar.x = ar.x - dx_push
-      return true
-    end
-
-    local dy_push
-    if center_dy >= 0 then
-      dy_push = ar.y + ar.height - otr.y
-    else
-      dy_push = ar.y - (otr.y + otr.height)
-    end
-    if dy_push ~= 0 and test_no_overlap(ar, 0, dy_push, active) then
-      ar.y = ar.y - dy_push
-      return true
+      local dy_push
+      if center_dy >= 0 then
+        dy_push = ar.y + ar.height - otr.y
+      else
+        dy_push = ar.y - (otr.y + otr.height)
+      end
+      if dy_push ~= 0 and test_no_overlap(ar, 0, dy_push, active) then
+        ar.y = ar.y - dy_push
+        return true
+      end
     end
   end
 
