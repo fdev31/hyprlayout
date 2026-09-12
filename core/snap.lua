@@ -53,15 +53,16 @@ local function snap_weight(ac_types, oc_types)
   return 1.0
 end
 
-local function test_no_overlap(ar, dx, dy, gui_screens)
-  local test_x = ar.x - dx
-  local test_y = ar.y - dy
-  for i = 1, #gui_screens - 1 do
-    local other = gui_screens[i]
-    if other then
-      local otr = other.target_rect
-      if test_x < otr.x + otr.width and otr.x < test_x + ar.width
-        and test_y < otr.y + otr.height and otr.y < test_y + ar.height then
+-- Check if moving rect (rx, ry, rw, rh) by (-dx, -dy) would overlap any screen in gui_screens
+-- except the one at index active_idx
+local function test_no_overlap(rx, ry, rw, rh, dx, dy, gui_screens, active_idx)
+  local test_x = rx - dx
+  local test_y = ry - dy
+  for i = 1, #gui_screens do
+    if i ~= active_idx then
+      local otr = gui_screens[i].target_rect
+      if test_x < otr.x + otr.width and otr.x < test_x + rw
+        and test_y < otr.y + otr.height and otr.y < test_y + rh then
         return false
       end
     end
@@ -69,8 +70,18 @@ local function test_no_overlap(ar, dx, dy, gui_screens)
   return true
 end
 
-function M.snap_to_best_non_overlapping(active, candidates, max_dist)
+local function find_active_index(gui_screens, active)
+  for i = 1, #gui_screens do
+    if gui_screens[i] == active then
+      return i
+    end
+  end
+  return #gui_screens
+end
+
+function M.snap_to_best_non_overlapping(active, candidates, gui_screens, max_dist)
   local ar = active.target_rect
+  local active_idx = find_active_index(gui_screens, active)
   local active_coords = ref_points(ar)
   local pairs_list = {}
 
@@ -94,7 +105,7 @@ function M.snap_to_best_non_overlapping(active, candidates, max_dist)
   table.sort(pairs_list, function(a, b) return a.weighted < b.weighted end)
 
   for _, p in ipairs(pairs_list) do
-    if test_no_overlap(ar, p.dx, p.dy, active) then
+    if test_no_overlap(ar.x, ar.y, ar.width, ar.height, p.dx, p.dy, gui_screens, active_idx) then
       ar.x = ar.x - p.dx
       ar.y = ar.y - p.dy
       return true
@@ -120,7 +131,7 @@ function M.snap_to_best_non_overlapping(active, candidates, max_dist)
       else
         dx_push = ar.x - (otr.x + otr.width)
       end
-      if dx_push ~= 0 and test_no_overlap(ar, dx_push, 0, active) then
+      if dx_push ~= 0 and test_no_overlap(ar.x, ar.y, ar.width, ar.height, dx_push, 0, gui_screens, active_idx) then
         ar.x = ar.x - dx_push
         return true
       end
@@ -131,7 +142,7 @@ function M.snap_to_best_non_overlapping(active, candidates, max_dist)
       else
         dy_push = ar.y - (otr.y + otr.height)
       end
-      if dy_push ~= 0 and test_no_overlap(ar, 0, dy_push, active) then
+      if dy_push ~= 0 and test_no_overlap(ar.x, ar.y, ar.width, ar.height, 0, dy_push, gui_screens, active_idx) then
         ar.y = ar.y - dy_push
         return true
       end
@@ -157,7 +168,7 @@ function M.snap_active_screen(gui_screens)
   end
 
   if #colliding > 0 then
-    M.snap_to_best_non_overlapping(active, colliding, nil)
+    M.snap_to_best_non_overlapping(active, colliding, gui_screens, nil)
   end
 end
 
@@ -179,7 +190,7 @@ function M.attract_screens(gui_screens)
   for i = 1, #gui_screens - 1 do
     table.insert(candidates, gui_screens[i])
   end
-  M.snap_to_best_non_overlapping(active, candidates, SNAP_RADIUS)
+  M.snap_to_best_non_overlapping(active, candidates, gui_screens, SNAP_RADIUS)
 end
 
 return M
