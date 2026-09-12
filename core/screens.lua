@@ -78,10 +78,7 @@ function M.load()
       cur_mode = available[1]
     end
 
-    local active = false
-    if monitor.activeWorkspace and monitor.activeWorkspace.name and monitor.activeWorkspace.name ~= "" then
-      active = true
-    end
+    local active = not monitor.disabled
 
     local screen = Screen.new({
       uid = monitor.name,
