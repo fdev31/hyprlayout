@@ -27,6 +27,7 @@ function Widget:on_press(mx, my) end
 function Widget:on_drag(mx, my, dx, dy) end
 function Widget:on_release(mx, my) end
 function Widget:draw() end
+function Widget:draw_overlay() end
 function Widget:update(dt) end
 
 return Widget

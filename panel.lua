@@ -584,6 +584,11 @@ function PANEL:draw()
   self.profile_label:draw()
   self.status:draw()
 
+  -- Draw overlays (dropdown options) on top of everything
+  for _, w in ipairs(self.widgets) do
+    w:draw_overlay()
+  end
+
   if self._modal then
     self._modal:draw()
   end

@@ -122,28 +122,31 @@ function Dropdown:draw()
     love.graphics.polygon("fill", ax, ay - 3, ax + 6, ay - 3, ax + 3, ay + 3)
   end
 
-  -- Dropdown options
-  if self._open then
-    local opt_h = r.height
-    for i = 1, #self.options do
-      local oy = r.y + i * opt_h
-      local opt = self.options[i]
-      local name = opt.name or tostring(opt)
+end
 
-      if i == self.selected_index then
-        love.graphics.setColor(SELECTED_COLOR[1], SELECTED_COLOR[2], SELECTED_COLOR[3])
-      elseif i == self._hover_option then
-        love.graphics.setColor(HOVER_COLOR[1], HOVER_COLOR[2], HOVER_COLOR[3])
-      else
-        love.graphics.setColor(BG_COLOR[1], BG_COLOR[2], BG_COLOR[3])
-      end
-      love.graphics.rectangle("fill", r.x, oy, r.width, opt_h)
-      love.graphics.setColor(BORDER_COLOR[1], BORDER_COLOR[2], BORDER_COLOR[3])
-      love.graphics.rectangle("line", r.x, oy, r.width, opt_h)
+function Dropdown:draw_overlay()
+  if not self._open then return end
+  local r = self.rect
+  love.graphics.setFont(self._font)
+  local opt_h = r.height
+  for i = 1, #self.options do
+    local oy = r.y + i * opt_h
+    local opt = self.options[i]
+    local name = opt.name or tostring(opt)
 
-      love.graphics.setColor(TEXT_COLOR[1], TEXT_COLOR[2], TEXT_COLOR[3])
-      love.graphics.print(name, r.x + 8, oy + (opt_h - self.font_size) / 2)
+    if i == self.selected_index then
+      love.graphics.setColor(SELECTED_COLOR[1], SELECTED_COLOR[2], SELECTED_COLOR[3])
+    elseif i == self._hover_option then
+      love.graphics.setColor(HOVER_COLOR[1], HOVER_COLOR[2], HOVER_COLOR[3])
+    else
+      love.graphics.setColor(BG_COLOR[1], BG_COLOR[2], BG_COLOR[3])
     end
+    love.graphics.rectangle("fill", r.x, oy, r.width, opt_h)
+    love.graphics.setColor(BORDER_COLOR[1], BORDER_COLOR[2], BORDER_COLOR[3])
+    love.graphics.rectangle("line", r.x, oy, r.width, opt_h)
+
+    love.graphics.setColor(TEXT_COLOR[1], TEXT_COLOR[2], TEXT_COLOR[3])
+    love.graphics.print(name, r.x + 8, oy + (opt_h - self.font_size) / 2)
   end
 end
 
