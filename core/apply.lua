@@ -1,7 +1,5 @@
 local M = {}
 
-local SCREEN_SCALE = 8
-
 local function trim_rects_flip_y(rects)
   local min_x = math.huge
   local max_y = -math.huge
@@ -19,15 +17,15 @@ local function trim_rects_flip_y(rects)
   end
 end
 
-function M.make_commands(gui_screens)
+function M.make_commands(gui_screens, canvas_scale)
   local rects = {}
   for _, gs in ipairs(gui_screens) do
     local r = gs.target_rect
     table.insert(rects, {
-      x = r.x * SCREEN_SCALE,
-      y = r.y * SCREEN_SCALE,
-      width = r.width * SCREEN_SCALE,
-      height = r.height * SCREEN_SCALE,
+      x = r.x * canvas_scale,
+      y = r.y * canvas_scale,
+      width = r.width * canvas_scale,
+      height = r.height * canvas_scale,
     })
   end
   trim_rects_flip_y(rects)
@@ -71,8 +69,8 @@ function M.run_commands(cmds)
   end
 end
 
-function M.apply(gui_screens)
-  local cmds = M.make_commands(gui_screens)
+function M.apply(gui_screens, canvas_scale)
+  local cmds = M.make_commands(gui_screens, canvas_scale)
   M.run_commands(cmds)
   return true
 end

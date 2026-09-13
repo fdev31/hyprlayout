@@ -393,7 +393,7 @@ function PANEL:on_scale_change()
   if not opt then return end
   local screen = gs.screen
   screen.scale = opt.value
-  local SCREEN_SCALE = 8
+  local SCREEN_SCALE = self.screen_scale.value
   if screen.mode then
     local old_w, old_h = gs.target_rect.width, gs.target_rect.height
     local new_w = math.floor(screen.mode.width / SCREEN_SCALE / screen.scale)
@@ -416,7 +416,7 @@ function PANEL:on_rotation_change()
   if not opt then return end
   local screen = gs.screen
   screen.transform = opt.value
-  local SCREEN_SCALE = 8
+  local SCREEN_SCALE = self.screen_scale.value
   if screen.mode then
     local old_w, old_h = gs.target_rect.width, gs.target_rect.height
     local new_w = math.floor(screen.mode.width / SCREEN_SCALE / screen.scale)
@@ -535,7 +535,7 @@ function PANEL:on_load_profile()
             }
             self.status:set_text("No matching mode for " .. gs.screen.uid)
           end
-          local SCREEN_SCALE = 8
+          local SCREEN_SCALE = self.screen_scale.value
           local new_w = math.floor(gs.screen.mode.width / SCREEN_SCALE / gs.screen.scale)
           local new_h = math.floor(gs.screen.mode.height / SCREEN_SCALE / gs.screen.scale)
           if gs.screen.transform % 2 == 1 then

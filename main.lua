@@ -88,11 +88,11 @@ local function on_screen_resized(gs, old_w, old_h)
 end
 
 local function set_current_modes_as_ref()
-  original_cmd = apply.make_commands(gui_screens)
+  original_cmd = apply.make_commands(gui_screens, SCREEN_SCALE)
 end
 
 local function action_apply()
-  local cmds = apply.make_commands(gui_screens)
+  local cmds = apply.make_commands(gui_screens, SCREEN_SCALE)
   if #cmds > 0 then
     apply.run_commands(cmds)
     confirm_start = os.clock()
