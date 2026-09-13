@@ -564,8 +564,9 @@ function PANEL:on_load_profile()
           gs.target_rect.height = new_h
         end
         if saved.position then
-          gs.target_rect.x = saved.position.x / 8
-          gs.target_rect.y = saved.position.y / 8
+          local sc = self.screen_scale.value or 4
+          gs.target_rect.x = saved.position.x / sc
+          gs.target_rect.y = saved.position.y / sc
         end
       end
     end
