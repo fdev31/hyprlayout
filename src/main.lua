@@ -457,8 +457,8 @@ function love.load()
     SCREEN_SCALE = math.max(2, math.min(16, saved.canvas_scale))
   end
   if saved.ui_scale then
-    panel.ui_scale_factor = saved.ui_scale
-    panel_w = math.floor(Panel.PANEL_W * saved.ui_scale)
+    panel.ui_scale_factor = math.max(0.5, math.min(1.5, saved.ui_scale))
+    panel_w = math.floor(Panel.PANEL_W * panel.ui_scale_factor)
   end
   if saved.attract_enabled ~= nil then
     panel.attract_enabled = saved.attract_enabled

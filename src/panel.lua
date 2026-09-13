@@ -213,7 +213,7 @@ function PANEL:layout(win_w, win_h)
   -- UI Scale
   self.ui_label = Label.new(x, y, "UI Scale", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
   self.ui_scale = Slider.new(x + label_w, y, cw - label_w, row_h, {
-    min = 0.5, max = 2.0, step = 0.25, value = self.ui_scale_factor or 1.0, scale = ui_scale,
+    min = 0.5, max = 1.5, step = 0.25, value = self.ui_scale_factor or 1.0, scale = ui_scale,
     on_change = function(val) self.on_ui_scale_change(val) end,
   })
   y = y + row_h + 5
