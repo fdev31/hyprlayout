@@ -1,3 +1,5 @@
+local Rect = require("core.rect")
+
 local SNAP_WEIGHT_BOTH = 0.25
 local SNAP_WEIGHT_SINGLE = 0.5
 local SNAP_PENALTY_CORNER = 1.5
@@ -6,22 +8,6 @@ local SNAP_RADIUS = 300
 local M = {}
 
 M.SNAP_RADIUS = SNAP_RADIUS
-
-local function ref_points(r)
-  local cx = r.x + r.width / 2
-  local cy = r.y + r.height / 2
-  local pts = {
-    { {r.x, r.y}, {"left", "top"} },
-    { {r.x + r.width, r.y}, {"right", "top"} },
-    { {r.x + r.width, r.y + r.height}, {"right", "bottom"} },
-    { {r.x, r.y + r.height}, {"left", "bottom"} },
-    { {cx, r.y}, {"center_x", "top"} },
-    { {cx, r.y + r.height}, {"center_x", "bottom"} },
-    { {r.x, cy}, {"left", "center_y"} },
-    { {r.x + r.width, cy}, {"right", "center_y"} },
-  }
-  return pts
-end
 
 local function snap_weight(ac_types, oc_types)
   local opposite = {
@@ -56,13 +42,10 @@ end
 -- Check if moving rect (rx, ry, rw, rh) by (-dx, -dy) would overlap any screen in gui_screens
 -- except the one at index active_idx
 local function test_no_overlap(rx, ry, rw, rh, dx, dy, gui_screens, active_idx)
-  local test_x = rx - dx
-  local test_y = ry - dy
+  local test = Rect.new(rx - dx, ry - dy, rw, rh)
   for i = 1, #gui_screens do
     if i ~= active_idx then
-      local otr = gui_screens[i].target_rect
-      if test_x < otr.x + otr.width and otr.x < test_x + rw
-        and test_y < otr.y + otr.height and otr.y < test_y + rh then
+      if test:collide(gui_screens[i].target_rect) then
         return false
       end
     end
@@ -82,20 +65,20 @@ end
 function M.snap_to_best_non_overlapping(active, candidates, gui_screens, max_dist)
   local ar = active.target_rect
   local active_idx = find_active_index(gui_screens, active)
-  local active_coords = ref_points(ar)
+  local active_coords = ar:ref_points()
   local pairs_list = {}
 
   for _, other in ipairs(candidates) do
     local otr = other.target_rect
-    local other_coords = ref_points(otr)
+    local other_coords = otr:ref_points()
 
     for _, ac in ipairs(active_coords) do
       for _, oc in ipairs(other_coords) do
-        local dx = ac[1][1] - oc[1][1]
-        local dy = ac[1][2] - oc[1][2]
+        local dx = ac.pos[1] - oc.pos[1]
+        local dy = ac.pos[2] - oc.pos[2]
         local raw_dist = math.sqrt(dx * dx + dy * dy)
         if not (max_dist and raw_dist > max_dist) then
-          local weight = snap_weight(ac[2], oc[2])
+          local weight = snap_weight(ac.types, oc.types)
           table.insert(pairs_list, { weighted = raw_dist * weight, dx = dx, dy = dy })
         end
       end
@@ -115,9 +98,7 @@ function M.snap_to_best_non_overlapping(active, candidates, gui_screens, max_dis
   -- Last resort: push away along the axis that preserves center alignment
   for _, other in ipairs(candidates) do
     local otr = other.target_rect
-    local overlaps = ar.x < otr.x + otr.width and otr.x < ar.x + ar.width
-      and ar.y < otr.y + otr.height and otr.y < ar.y + ar.height
-    if overlaps then
+    if ar:collide(otr) then
       local acx = ar.x + ar.width / 2
       local acy = ar.y + ar.height / 2
       local ocx = otr.x + otr.width / 2
@@ -160,9 +141,7 @@ function M.snap_active_screen(gui_screens)
   local colliding = {}
   for i = 1, #gui_screens - 1 do
     local other = gui_screens[i]
-    local otr = other.target_rect
-    if ar.x < otr.x + otr.width and otr.x < ar.x + ar.width
-      and ar.y < otr.y + otr.height and otr.y < ar.y + ar.height then
+    if ar:collide(other.target_rect) then
       table.insert(colliding, other)
     end
   end
@@ -179,9 +158,7 @@ function M.attract_screens(gui_screens)
 
   -- If screens already overlap, don't interfere
   for i = 1, #gui_screens - 1 do
-    local otr = gui_screens[i].target_rect
-    if ar.x < otr.x + otr.width and otr.x < ar.x + ar.width
-      and ar.y < otr.y + otr.height and otr.y < ar.y + ar.height then
+    if ar:collide(gui_screens[i].target_rect) then
       return
     end
   end

@@ -7,11 +7,13 @@ local Slider = require("widgets.slider")
 local Modal = require("widgets.modal")
 local profiles = require("core.profiles")
 local apply = require("core.apply")
+local Rect = require("core.rect")
 
 local PANEL = {}
 PANEL.__index = PANEL
 
-local PANEL_W = 280
+PANEL.PANEL_W = 280
+PANEL.DEFAULT_CANVAS_SCALE = 6
 local MARGIN = 10
 local ROW_H = 28
 local LABEL_W = 80
@@ -100,7 +102,7 @@ end
 
 function PANEL:layout(win_w, win_h)
   local ui_scale = self.ui_scale_factor or 1.0
-  local pw = math.floor(PANEL_W * ui_scale)
+  local pw = math.floor(PANEL.PANEL_W * ui_scale)
   local row_h = math.floor(ROW_H * ui_scale)
   local margin = math.floor(MARGIN * ui_scale)
   local label_w = math.floor(LABEL_W * ui_scale)
@@ -125,7 +127,7 @@ function PANEL:layout(win_w, win_h)
 
   -- Canvas
   self.ss_label = Label.new(x, y, "Canvas", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
-  local ss_val = self.screen_scale and self.screen_scale.value or 4
+  local ss_val = self.screen_scale and self.screen_scale.value or PANEL.DEFAULT_CANVAS_SCALE
   self.screen_scale = Slider.new(x + label_w, y, cw - label_w, row_h, {
     min = 2, max = 16, step = 1, value = ss_val, scale = ui_scale,
     on_change = function(val) self.on_screen_scale_change(val) end,
@@ -372,12 +374,7 @@ function PANEL:on_resolution_change()
   local screen = gs.screen
   local old_w, old_h = gs.target_rect.width, gs.target_rect.height
   screen.mode = { width = opt.value.w, height = opt.value.h, freq = screen.mode and screen.mode.freq or 60 }
-  local SCREEN_SCALE = self.screen_scale.value
-  local new_w = math.floor(opt.value.w / SCREEN_SCALE / screen.scale)
-  local new_h = math.floor(opt.value.h / SCREEN_SCALE / screen.scale)
-  if screen.transform % 2 == 1 then
-    new_w, new_h = new_h, new_w
-  end
+  local new_w, new_h = Rect.screen_size(opt.value.w, opt.value.h, screen.scale, self.screen_scale.value, screen.transform)
   gs.target_rect.width = new_w
   gs.target_rect.height = new_h
   self:update_frequencies()
@@ -393,14 +390,9 @@ function PANEL:on_scale_change()
   if not opt then return end
   local screen = gs.screen
   screen.scale = opt.value
-  local SCREEN_SCALE = self.screen_scale.value
   if screen.mode then
     local old_w, old_h = gs.target_rect.width, gs.target_rect.height
-    local new_w = math.floor(screen.mode.width / SCREEN_SCALE / screen.scale)
-    local new_h = math.floor(screen.mode.height / SCREEN_SCALE / screen.scale)
-    if screen.transform % 2 == 1 then
-      new_w, new_h = new_h, new_w
-    end
+    local new_w, new_h = Rect.screen_size(screen.mode.width, screen.mode.height, screen.scale, self.screen_scale.value, screen.transform)
     gs.target_rect.width = new_w
     gs.target_rect.height = new_h
     if self.on_screen_resized then
@@ -416,14 +408,9 @@ function PANEL:on_rotation_change()
   if not opt then return end
   local screen = gs.screen
   screen.transform = opt.value
-  local SCREEN_SCALE = self.screen_scale.value
   if screen.mode then
     local old_w, old_h = gs.target_rect.width, gs.target_rect.height
-    local new_w = math.floor(screen.mode.width / SCREEN_SCALE / screen.scale)
-    local new_h = math.floor(screen.mode.height / SCREEN_SCALE / screen.scale)
-    if screen.transform % 2 == 1 then
-      new_w, new_h = new_h, new_w
-    end
+    local new_w, new_h = Rect.screen_size(screen.mode.width, screen.mode.height, screen.scale, self.screen_scale.value, screen.transform)
     gs.target_rect.width = new_w
     gs.target_rect.height = new_h
     if self.on_screen_resized then
@@ -554,17 +541,12 @@ function PANEL:on_load_profile()
             }
             self.status:set_text("No matching mode for " .. gs.screen.uid)
           end
-          local SCREEN_SCALE = self.screen_scale.value
-          local new_w = math.floor(gs.screen.mode.width / SCREEN_SCALE / gs.screen.scale)
-          local new_h = math.floor(gs.screen.mode.height / SCREEN_SCALE / gs.screen.scale)
-          if gs.screen.transform % 2 == 1 then
-            new_w, new_h = new_h, new_w
-          end
+          local new_w, new_h = Rect.screen_size(gs.screen.mode.width, gs.screen.mode.height, gs.screen.scale, self.screen_scale.value, gs.screen.transform)
           gs.target_rect.width = new_w
           gs.target_rect.height = new_h
         end
         if saved.position then
-          local sc = self.screen_scale.value or 4
+          local sc = self.screen_scale.value or PANEL.DEFAULT_CANVAS_SCALE
           gs.target_rect.x = saved.position.x / sc
           gs.target_rect.y = saved.position.y / sc
         end
@@ -584,9 +566,7 @@ function PANEL:on_new_profile()
     local win_h = love.graphics.getHeight()
     self._modal = Modal.new(win_w, win_h, "New Profile Name", "Profile name",
       function(text)
-        self.profiles_dd.selected_index = 0
-        self.profiles_dd.options = { { name = text, value = text } }
-        self.status:set_text("Save as: " .. text)
+        self:_do_save_profile(text)
       end,
       function()
       end

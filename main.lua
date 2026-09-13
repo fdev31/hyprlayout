@@ -7,7 +7,7 @@ local Panel = require("panel")
 local apply = require("core.apply")
 local settings = require("core.settings")
 
-local SCREEN_SCALE = 4
+local SCREEN_SCALE = Panel.DEFAULT_CANVAS_SCALE
 local CONFIRM_DELAY = 20
 local SCREENSHOT_INTERVAL = 10
 local gui_screens = {}
@@ -18,7 +18,7 @@ local drag_offset = { 0, 0 }
 local status_msg = ""
 local status_timer = 0
 local panel = Panel.new()
-local panel_w = 280
+local panel_w = Panel.PANEL_W
 local confirm_start = 0
 local original_cmd = nil
 local anchor_data = {}
@@ -31,12 +31,7 @@ local function get_screen_size(screen)
   if not screen.mode then
     return 100, 100
   end
-  local w = math.floor(screen.mode.width / SCREEN_SCALE / screen.scale)
-  local h = math.floor(screen.mode.height / SCREEN_SCALE / screen.scale)
-  if screen.transform % 2 == 1 then
-    w, h = h, w
-  end
-  return w, h
+  return Rect.screen_size(screen.mode.width, screen.mode.height, screen.scale, SCREEN_SCALE, screen.transform)
 end
 
 local function canvas_w()
@@ -125,6 +120,23 @@ local function set_current_modes_as_ref()
   original_cmd = apply.make_commands(gui_screens, SCREEN_SCALE)
 end
 
+local function reload_all()
+  load_screens()
+  center_layout(true)
+  panel:set_screen(nil)
+  set_current_modes_as_ref()
+end
+
+local function revert_layout(msg)
+  if original_cmd and #original_cmd > 0 then
+    apply.run_commands(original_cmd)
+  end
+  confirm_start = 0
+  reload_all()
+  status_msg = msg
+  status_timer = 3
+end
+
 local function action_apply()
   local cmds = apply.make_commands(gui_screens, SCREEN_SCALE)
   if #cmds > 0 then
@@ -158,8 +170,7 @@ local function load_screens()
         max_w = math.max(max_w, m.width)
         max_h = math.max(max_h, m.height)
       end
-      w = math.floor(max_w / SCREEN_SCALE / screen.scale)
-      h = math.floor(max_h / SCREEN_SCALE / screen.scale)
+      w, h = Rect.screen_size(max_w, max_h, screen.scale, SCREEN_SCALE, screen.transform)
     end
     local rect = Rect.new(
       math.floor(x / SCREEN_SCALE),
@@ -188,7 +199,7 @@ local function layout_panel()
   panel.on_ui_scale_change = function(val)
     if type(val) ~= "number" then return end
     panel.ui_scale_factor = val
-    panel_w = math.floor(280 * val)
+    panel_w = math.floor(Panel.PANEL_W * val)
     for _, gs in ipairs(gui_screens) do
       gs.ui_scale = val
     end
@@ -199,9 +210,7 @@ local function layout_panel()
     layout_panel()
   end
   panel.on_reload = function()
-    load_screens()
-    layout_panel()
-    set_current_modes_as_ref()
+    reload_all()
   end
   panel.on_attract_toggle = function(val)
     panel.attract_enabled = val
@@ -267,7 +276,7 @@ function love.load()
   end
   if saved.ui_scale then
     panel.ui_scale_factor = saved.ui_scale
-    panel_w = math.floor(280 * saved.ui_scale)
+    panel_w = math.floor(Panel.PANEL_W * saved.ui_scale)
   end
   if saved.attract_enabled ~= nil then
     panel.attract_enabled = saved.attract_enabled
@@ -315,16 +324,7 @@ function love.update(dt)
   if confirm_start > 0 then
     local elapsed = os.clock() - confirm_start
     if elapsed >= CONFIRM_DELAY then
-      if original_cmd and #original_cmd > 0 then
-        apply.run_commands(original_cmd)
-      end
-      confirm_start = 0
-      load_screens()
-      center_layout(true)
-      panel:set_screen(nil)
-      set_current_modes_as_ref()
-      status_msg = "Timed out - reverted"
-      status_timer = 3
+      revert_layout("Timed out - reverted")
     end
   end
 end
@@ -487,16 +487,7 @@ function love.keypressed(key)
     end
   elseif key == "escape" then
     if confirm_start > 0 then
-      if original_cmd and #original_cmd > 0 then
-        apply.run_commands(original_cmd)
-      end
-      confirm_start = 0
-      load_screens()
-      center_layout(true)
-      panel:set_screen(nil)
-      set_current_modes_as_ref()
-      status_msg = "Reverted"
-      status_timer = 3
+      revert_layout("Reverted")
     else
       love.event.quit()
     end
@@ -505,9 +496,6 @@ function love.keypressed(key)
       panel:load_profile()
     end
   elseif key == "r" then
-    load_screens()
-    center_layout(true)
-    panel:set_screen(nil)
-    set_current_modes_as_ref()
+    reload_all()
   end
 end

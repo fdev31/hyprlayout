@@ -1,21 +1,8 @@
+local Rect = require("core.rect")
+
 local M = {}
 
 local TOL = 2
-
-local function ref_points(rect)
-  local cx = rect.x + rect.width / 2
-  local cy = rect.y + rect.height / 2
-  return {
-    { pos = { rect.x, rect.y }, types = { "left", "top" } },
-    { pos = { rect.x + rect.width, rect.y }, types = { "right", "top" } },
-    { pos = { rect.x + rect.width, rect.y + rect.height }, types = { "right", "bottom" } },
-    { pos = { rect.x, rect.y + rect.height }, types = { "left", "bottom" } },
-    { pos = { cx, rect.y }, types = { "center_x", "top" } },
-    { pos = { cx, rect.y + rect.height }, types = { "center_x", "bottom" } },
-    { pos = { rect.x, cy }, types = { "left", "center_y" } },
-    { pos = { rect.x + rect.width, cy }, types = { "right", "center_y" } },
-  }
-end
 
 local function ref_point_offset(ref_types, width, height)
   local x_map = { left = 0, right = width, center_x = width / 2 }
@@ -37,8 +24,8 @@ function M.detect(gui_screens)
   for i = 1, #gui_screens do
     for j = i + 1, #gui_screens do
       local A, B = gui_screens[i], gui_screens[j]
-      local a_refs = ref_points(A.target_rect)
-      local b_refs = ref_points(B.target_rect)
+      local a_refs = A.target_rect:ref_points()
+      local b_refs = B.target_rect:ref_points()
       local matches = {}
       for _, a in ipairs(a_refs) do
         for _, b in ipairs(b_refs) do
