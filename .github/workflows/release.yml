@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install LÖVE build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev libfontconfig1-dev libgl1-mesa-dev libopenal-dev \
+            libogg-dev libpng-dev libtheora-dev libvorbis-dev libx11-dev \
+            libxrandr-dev libluajit-5.1-dev libmodplug-dev libsdl2-dev \
+            libfreetype-dev libmpg123-dev zlib1g-dev
+
+      - name: Install just
+        uses: taiki-e/install-action@just
+
+      - name: Build artifacts (self-contained exe + .love)
+        run: just build
+
+      - name: List artifacts
+        run: ls -la dist/
+
+      - name: Create release and upload artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/hyprlayout
+            dist/hyprlayout.love
+          generate_release_notes: true

@@ -1,1 +1,3 @@
 shots/
+dist/
+.love-build/
