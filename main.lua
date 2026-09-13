@@ -72,6 +72,25 @@ local function center_layout(immediate)
   end
 end
 
+local function change_canvas_scale(val)
+  if type(val) ~= "number" then return end
+  val = math.max(2, math.min(16, math.floor(val)))
+  if val == SCREEN_SCALE then return end
+  local old_scale = SCREEN_SCALE
+  SCREEN_SCALE = val
+  local ratio = old_scale / val
+  for _, gs in ipairs(gui_screens) do
+    local r = gs.target_rect
+    r.x = r.x * ratio
+    r.y = r.y * ratio
+    r.width = r.width * ratio
+    r.height = r.height * ratio
+  end
+  center_layout(true)
+  anchor_data = anchors.detect(gui_screens)
+  panel.screen_scale.value = val
+end
+
 local function on_release_snap()
   snap.snap_active_screen(gui_screens)
   if panel.attract_enabled then
@@ -155,25 +174,14 @@ local function layout_panel()
   panel.on_screen_resized = on_screen_resized
   panel.on_center = function() center_layout(true) end
   panel.on_apply_callback = function() action_apply() end
-  panel.on_screen_scale_change = function(val)
-    if type(val) ~= "number" then return end
-    local old_scale = SCREEN_SCALE
-    SCREEN_SCALE = val
-    local ratio = old_scale / val
-    for _, gs in ipairs(gui_screens) do
-      local r = gs.target_rect
-      r.x = r.x * ratio
-      r.y = r.y * ratio
-      r.width = r.width * ratio
-      r.height = r.height * ratio
-    end
-    center_layout(true)
-    anchor_data = anchors.detect(gui_screens)
-  end
+  panel.on_screen_scale_change = change_canvas_scale
   panel.on_ui_scale_change = function(val)
     if type(val) ~= "number" then return end
     panel.ui_scale_factor = val
     panel_w = math.floor(280 * val)
+    for _, gs in ipairs(gui_screens) do
+      gs.ui_scale = val
+    end
     layout_panel()
   end
   panel.on_visibility_changed = function()
@@ -349,6 +357,13 @@ function love.mousemoved(x, y)
     selected:set_position(nx, ny)
   else
     panel:on_move(x, y)
+  end
+end
+
+function love.wheelmoved(_, dy)
+  local x = love.mouse.getX()
+  if x < canvas_w() then
+    change_canvas_scale(SCREEN_SCALE + dy)
   end
 end
 

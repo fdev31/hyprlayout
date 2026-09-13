@@ -28,6 +28,8 @@ function GuiScreen.new(screen, rect)
   self.cur_border = 2.0
   self.preview = nil
   self._pulse = 0
+  self.ui_scale = 1.0
+  self._font = nil
   return self
 end
 
@@ -137,16 +139,22 @@ function GuiScreen:draw()
   end
   love.graphics.setLineWidth(1)
 
+  local s = self.ui_scale
+  local fs = math.floor(14 * s)
+  if not self._font or self._font_size ~= fs then
+    self._font_size = fs
+    self._font = love.graphics.newFont(fs)
+  end
+  love.graphics.setFont(self._font)
   local tx, ty = r.x + r.width / 2, r.y + r.height / 2
-  local font = love.graphics.getFont()
   love.graphics.setColor(0.94, 0.94, 0.94)
-  love.graphics.printf(self.screen.name, r.x, ty - 10, r.width, "center")
+  love.graphics.printf(self.screen.name, r.x, ty - math.floor(10 * s), r.width, "center")
 
   if self.screen.active and self.screen.mode then
     local label = string.format("%dx%d@%d",
       self.screen.mode.width, self.screen.mode.height, math.floor(self.screen.mode.freq))
-    love.graphics.printf(label, r.x, ty - 25, r.width, "center")
-    love.graphics.printf(self.screen.uid, r.x, ty + 5, r.width, "center")
+    love.graphics.printf(label, r.x, ty - math.floor(25 * s), r.width, "center")
+    love.graphics.printf(self.screen.uid, r.x, ty + math.floor(5 * s), r.width, "center")
   end
 end
 
