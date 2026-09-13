@@ -150,10 +150,10 @@ function Dropdown:draw_overlay()
   local opt_h = r.height
   local total_h = #self.options * opt_h
   local visible_h = total_h * exp
-  local count = math.ceil(visible_h / opt_h)
-  if count > #self.options then count = #self.options end
 
-  for i = 1, count do
+  love.graphics.setScissor(r.x, r.y + r.height, r.width, visible_h)
+
+  for i = 1, #self.options do
     local oy = r.y + i * opt_h
     local opt = self.options[i]
     local name = opt.name or tostring(opt)
@@ -172,6 +172,8 @@ function Dropdown:draw_overlay()
     love.graphics.setColor(TEXT_COLOR[1], TEXT_COLOR[2], TEXT_COLOR[3])
     love.graphics.print(name, r.x + 8, oy + (opt_h - self.font_size) / 2)
   end
+
+  love.graphics.setScissor()
 end
 
 return Dropdown
