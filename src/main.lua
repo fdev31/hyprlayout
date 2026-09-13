@@ -6,6 +6,7 @@ local GuiScreen = require("gui_screen")
 local Panel = require("panel")
 local apply = require("core.apply")
 local settings = require("core.settings")
+local profiles = require("core.profiles")
 
 local SCREEN_SCALE = Panel.DEFAULT_CANVAS_SCALE
 local CONFIRM_DELAY = 20
@@ -27,6 +28,7 @@ local shot_channel = nil
 local shot_timer = 0
 local shot_images = {}
 local help_visible = false
+local gui_initialized = false
 
 local function get_screen_size(screen)
   if not screen.mode then
@@ -270,7 +272,181 @@ function love.threaderror(msg)
   print("[THREAD ERROR] " .. tostring(msg))
 end
 
+local function get_canvas_scale()
+  local saved = settings.load()
+  if saved.canvas_scale then
+    return math.max(2, math.min(16, saved.canvas_scale))
+  end
+  return Panel.DEFAULT_CANVAS_SCALE
+end
+
+local function headless_apply(data, canvas_scale)
+  local ok = screens.load()
+  if not ok or #screens.displayInfo == 0 then
+    print("No screens found! " .. tostring(screens.error))
+    return
+  end
+
+  local gs_list = {}
+  for _, screen in ipairs(screens.displayInfo) do
+    local x, y = screen.position[1], screen.position[2]
+    local w, h
+    if screen.mode then
+      w, h = Rect.screen_size(screen.mode.width, screen.mode.height, screen.scale, canvas_scale, screen.transform)
+    else
+      local max_w, max_h = 1920, 1080
+      for _, m in ipairs(screen.available) do
+        max_w = math.max(max_w, m.width)
+        max_h = math.max(max_h, m.height)
+      end
+      w, h = Rect.screen_size(max_w, max_h, screen.scale, canvas_scale, screen.transform)
+    end
+    local rect = Rect.new(
+      math.floor(x / canvas_scale),
+      -math.floor(y / canvas_scale) - h,
+      w, h
+    )
+    table.insert(gs_list, GuiScreen.new(screen, rect))
+  end
+
+  for _, entry in ipairs(data.screens or {}) do
+    for _, gs in ipairs(gs_list) do
+      if gs.screen.uid == entry.uid then
+        gs.screen.active = entry.active
+        gs.screen.scale = entry.scale or 1
+        gs.screen.transform = entry.transform or 0
+        gs.screen.hdr_enabled = entry.hdr_enabled or false
+        gs.screen.cm = entry.cm or "auto"
+        gs.screen.sdrbrightness = entry.sdrbrightness or 1.0
+        gs.screen.sdrsaturation = entry.sdrsaturation or 1.0
+        gs.screen.sdr_eotf = entry.sdr_eotf or "default"
+        if entry.mode then
+          gs.screen.mode = {
+            width = entry.mode.width,
+            height = entry.mode.height,
+            freq = entry.mode.freq,
+          }
+          local new_w, new_h = Rect.screen_size(gs.screen.mode.width, gs.screen.mode.height, gs.screen.scale, canvas_scale, gs.screen.transform)
+          gs.target_rect.width = new_w
+          gs.target_rect.height = new_h
+        end
+        if entry.position then
+          gs.target_rect.x = entry.position.x / canvas_scale
+          gs.target_rect.y = entry.position.y / canvas_scale
+        end
+      end
+    end
+  end
+
+  local cmds = apply.make_commands(gs_list, canvas_scale)
+  apply.run_commands(cmds)
+end
+
+local function is_path(p)
+  if p:match("%.love$") then return true end
+  local f = io.popen(string.format('test -d %q 2>/dev/null; echo $?', p))
+  local out = f:read("*a") or ""
+  f:close()
+  return out:match("^0") ~= nil
+end
+
+local function first_user_arg()
+  if not arg then return nil end
+  -- When launched as `love <gamedir>`, arg[1] is the game directory;
+  -- with a fused binary, user args start at arg[1].
+  if arg[1] and is_path(arg[1]) then
+    return arg[2]
+  end
+  return arg[1]
+end
+
+local function handle_cli()
+  local a1 = first_user_arg()
+  if not a1 then return false end
+  local canvas_scale = get_canvas_scale()
+
+  if a1 == "-l" then
+    for _, name in ipairs(profiles.list_profiles()) do
+      print(" - " .. name)
+    end
+    love.event.quit()
+    return true
+  end
+
+  if a1 == "-m" then
+    screens.load()
+    local current = {}
+    for _, s in ipairs(screens.displayInfo) do
+      if s.active then
+        current[s.uid] = true
+      end
+    end
+    local matched_name, matched_data
+    for _, name in ipairs(profiles.list_profiles()) do
+      local data = profiles.load_profile(name)
+      if data then
+        local prof = {}
+        for _, s in ipairs(data.screens or {}) do
+          prof[s.uid] = true
+        end
+        local equal = true
+        for uid in pairs(current) do
+          if not prof[uid] then
+            equal = false
+            break
+          end
+        end
+        if equal then
+          for uid in pairs(prof) do
+            if not current[uid] then
+              equal = false
+              break
+            end
+          end
+        end
+        if equal then
+          matched_name, matched_data = name, data
+          break
+        end
+      end
+    end
+    if matched_name then
+      print("Matched profile " .. matched_name .. ". Applying it...")
+      headless_apply(matched_data, canvas_scale)
+    else
+      print("No matching profile for current display set")
+    end
+    love.event.quit()
+    return true
+  end
+
+  if a1:sub(1, 1) == "-" then
+    print([[With no options, launches the GUI
+Options:
+         -l : list profiles
+         -m : find a profile that matches the currently plugged display set, and apply it.
+              No-op if not found; will apply first in alphabetical order if multiple found.
+ <profile name> : loads a profile]])
+    love.event.quit()
+    return true
+  end
+
+  local data = profiles.load_profile(a1)
+  if not data then
+    print("No such profile: " .. a1)
+  else
+    headless_apply(data, canvas_scale)
+  end
+  love.event.quit()
+  return true
+end
+
 function love.load()
+  if handle_cli() then
+    return
+  end
+
+  gui_initialized = true
   math.randomseed(os.time())
   shot_channel = love.thread.getChannel("screenshots")
   local cwd = love.filesystem.getWorkingDirectory()
@@ -300,7 +476,9 @@ function love.load()
 end
 
 function love.quit()
-  save_settings()
+  if gui_initialized then
+    save_settings()
+  end
   if shot_thread then
     shot_thread:wait()
   end
