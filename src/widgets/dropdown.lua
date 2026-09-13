@@ -18,6 +18,7 @@ function Dropdown.new(x, y, w, h, opts)
   self.on_change = opts.on_change or function() end
   self.font_size = opts.font_size or 13
   self._font = love.graphics.newFont(self.font_size)
+  self.radius = opts.radius or 4
   self._open = false
   self._hover = false
   self._hover_option = -1
@@ -118,9 +119,9 @@ function Dropdown:draw()
   -- Main box
   local bg = self._hover and HOVER_COLOR or BG_COLOR
   love.graphics.setColor(bg[1], bg[2], bg[3])
-  love.graphics.rectangle("fill", r.x, r.y, r.width, r.height)
+  love.graphics.rectangle("fill", r.x, r.y, r.width, r.height, self.radius, self.radius)
   love.graphics.setColor(BORDER_COLOR[1], BORDER_COLOR[2], BORDER_COLOR[3])
-  love.graphics.rectangle("line", r.x, r.y, r.width, r.height)
+  love.graphics.rectangle("line", r.x, r.y, r.width, r.height, self.radius, self.radius)
 
   -- Text
   love.graphics.setColor(TEXT_COLOR[1], TEXT_COLOR[2], TEXT_COLOR[3])

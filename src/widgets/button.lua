@@ -18,6 +18,7 @@ function Button.new(x, y, w, h, text, opts)
   self.active_color = opts.active_color or ACTIVE_COLOR
   self.font_size = opts.font_size or 13
   self._font = love.graphics.newFont(self.font_size)
+  self.radius = opts.radius or 4
   self._hover = false
   self._pressed = false
   self._col = Anim.AnimColor.new(self.color[1], self.color[2], self.color[3])
@@ -62,7 +63,7 @@ function Button:draw()
   self._col:advance()
 
   love.graphics.setColor(self._col.r, self._col.g, self._col.b)
-  love.graphics.rectangle("fill", self.rect.x, self.rect.y, self.rect.width, self.rect.height)
+  love.graphics.rectangle("fill", self.rect.x, self.rect.y, self.rect.width, self.rect.height, self.radius, self.radius)
   love.graphics.setColor(1, 1, 1)
   love.graphics.setFont(self._font)
   local font = self._font
