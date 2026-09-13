@@ -539,6 +539,14 @@ function PANEL:update_profiles()
     table.insert(opts, { name = "(no profiles)", value = "" })
   end
   self.profiles_dd:set_options(opts)
+  if self._selected_profile_name then
+    for i, o in ipairs(opts) do
+      if o.name == self._selected_profile_name then
+        self.profiles_dd.selected_index = i
+        break
+      end
+    end
+  end
 end
 
 function PANEL:on_resolution_change()
@@ -659,6 +667,7 @@ function PANEL:on_ui_scale_change(val)
 end
 
 function PANEL:on_profile_select()
+  self._selected_profile_name = self.profiles_dd:get_selected_name()
   -- Loading is done via the Load button
 end
 
@@ -821,6 +830,7 @@ function PANEL:cycle_profile()
     idx = 1
   end
   self.profiles_dd.selected_index = idx
+  self._selected_profile_name = self.profiles_dd:get_selected_name()
   return true
 end
 
