@@ -175,6 +175,9 @@ local function layout_panel()
     panel_w = math.floor(280 * val)
     layout_panel()
   end
+  panel.on_visibility_changed = function()
+    layout_panel()
+  end
   panel:update_profiles()
   if selected then
     panel:set_screen(selected)

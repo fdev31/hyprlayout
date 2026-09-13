@@ -90,8 +90,10 @@ end
 function PANEL.new()
   local self = setmetatable({}, PANEL)
   self.widgets = {}
+  self.screen_widgets = {}
   self.visible = true
   self.selected_gs = nil
+  self.screen_settings_visible = false
   return self
 end
 
@@ -101,6 +103,8 @@ function PANEL:layout(win_w, win_h)
   local row_h = math.floor(ROW_H * ui_scale)
   local margin = math.floor(MARGIN * ui_scale)
   local label_w = math.floor(LABEL_W * ui_scale)
+  local dd_font = math.floor(13 * ui_scale)
+  local btn_font = math.floor(13 * ui_scale)
 
   self.x = win_w - pw - margin
   self.y = margin
@@ -111,74 +115,14 @@ function PANEL:layout(win_w, win_h)
   local y = self.y + margin
   local cw = self.w - 2 * margin
 
-  -- Title
-  self.title = Label.new(x, y, "Screen Settings", { width = cw, height = 20, font_size = math.floor(15 * ui_scale), align = "center" })
+  self.widgets = {}
+  self.screen_widgets = {}
+
+  -- === GENERAL SECTION (always visible) ===
+  self.title = Label.new(x, y, "General", { width = cw, height = 20, font_size = math.floor(15 * ui_scale), align = "center" })
   y = y + math.floor(30 * ui_scale)
 
-  -- Screen name
-  self.screen_name = Label.new(x, y, "", { width = cw, height = 20, font_size = math.floor(13 * ui_scale) })
-  y = y + row_h + 5
-
-  -- Resolution
-  self.res_label = Label.new(x, y, "Resolution", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
-  local dd_font = math.floor(13 * ui_scale)
-  self.resolutions = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
-    font_size = dd_font,
-    options = {},
-    on_change = function() self:on_resolution_change() end,
-  })
-  y = y + row_h + 5
-
-  -- Frequency
-  self.freq_label = Label.new(x, y, "Refresh", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
-  self.frequencies = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
-    font_size = dd_font,
-    options = {},
-    on_change = function() end,
-  })
-  y = y + row_h + 5
-
-  -- Scale
-  self.scale_label = Label.new(x, y, "Scale", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
-  self.scale = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
-    font_size = dd_font,
-    options = {
-      { name = "0.5", value = 0.5 },
-      { name = "0.75", value = 0.75 },
-      { name = "1.0", value = 1.0 },
-      { name = "1.25", value = 1.25 },
-      { name = "1.5", value = 1.5 },
-      { name = "2.0", value = 2.0 },
-    },
-    on_change = function() self:on_scale_change() end,
-  })
-  y = y + row_h + 5
-
-  -- Rotation
-  self.rot_label = Label.new(x, y, "Rotation", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
-  self.rotation = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
-    font_size = dd_font,
-    options = {
-      { name = "0 (normal)", value = 0 },
-      { name = "1 (90 CW)", value = 1 },
-      { name = "2 (180)", value = 2 },
-      { name = "3 (90 CCW)", value = 3 },
-      { name = "4 (flip H)", value = 4 },
-      { name = "5 (flip V)", value = 5 },
-    },
-    on_change = function() self:on_rotation_change() end,
-  })
-  y = y + row_h + 10
-
-  -- Power
-  self.power_label = Label.new(x, y, "Enabled", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
-  self.power = Toggle.new(x + label_w, y, math.floor(50 * ui_scale), math.floor(20 * ui_scale), {
-    value = true,
-    on_toggle = function(val) self:on_power_toggle(val) end,
-  })
-  y = y + row_h + 5
-
-  -- Screen Scale (canvas pixel ratio)
+  -- Canvas
   self.ss_label = Label.new(x, y, "Canvas", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
   local ss_val = self.screen_scale and self.screen_scale.value or 4
   self.screen_scale = Slider.new(x + label_w, y, cw - label_w, row_h, {
@@ -195,8 +139,6 @@ function PANEL:layout(win_w, win_h)
   })
   y = y + row_h + 15
 
-  -- Separator
-  y = y + 5
   -- Profiles section
   self.profile_label = Label.new(x, y, "Profiles", { width = cw, height = 20, font_size = math.floor(14 * ui_scale) })
   y = y + math.floor(25 * ui_scale)
@@ -209,7 +151,6 @@ function PANEL:layout(win_w, win_h)
   y = y + row_h + 5
 
   local bw = math.floor((cw - 3 * margin) / 4)
-  local btn_font = math.floor(13 * ui_scale)
   self.btn_save = Button.new(x, y, bw, row_h, "Save", { font_size = btn_font, on_click = function() self:on_save_profile() end })
   self.btn_load = Button.new(x + bw + margin, y, bw, row_h, "Load", { font_size = btn_font, on_click = function() self:on_load_profile() end })
   self.btn_new = Button.new(x + 2 * (bw + margin), y, bw, row_h, "New", { font_size = btn_font, on_click = function() self:on_new_profile() end })
@@ -221,48 +162,129 @@ function PANEL:layout(win_w, win_h)
   })
   y = y + row_h + 15
 
-  -- Apply section
-  local apply_w = math.floor((cw - MARGIN) / 2)
-  local apply_h = math.floor(35 * ui_scale)
-  self.btn_apply = Button.new(x, y, apply_w, apply_h, "Apply", {
-    font_size = btn_font,
-    color = { 0.2, 0.5, 0.3 },
-    hover_color = { 0.25, 0.6, 0.35 },
-    on_click = function() self:on_apply() end,
-  })
-  self.btn_center = Button.new(x + apply_w + MARGIN, y, apply_w, apply_h, "Center", {
-    font_size = btn_font,
-    on_click = function() if self.on_center then self.on_center() end end,
-  })
-  y = y + apply_h + 10
-
-  -- Status
-  self.status = Label.new(x, y, "", { width = cw, height = 20, font_size = math.floor(14 * ui_scale), color = { 1, 0.9, 0.5 } })
-
-  -- Store all widgets for event dispatch
-  self.widgets = {
-    self.resolutions, self.frequencies, self.scale, self.rotation,
-    self.power, self.screen_scale, self.ui_scale,
-    self.profiles_dd,
+  -- General widgets
+  local general_widgets = {
+    self.screen_scale, self.ui_scale, self.profiles_dd,
     self.btn_save, self.btn_load, self.btn_new, self.btn_delete,
-    self.btn_apply, self.btn_center,
   }
+
+  -- === SCREEN SETTINGS SECTION (conditional) ===
+  if self.screen_settings_visible then
+    y = y + 5
+    self.screen_title = Label.new(x, y, "Screen Settings", { width = cw, height = 20, font_size = math.floor(15 * ui_scale), align = "center" })
+    y = y + math.floor(30 * ui_scale)
+
+    self.screen_name = Label.new(x, y, "", { width = cw, height = 20, font_size = math.floor(13 * ui_scale) })
+    y = y + row_h + 5
+
+    -- Power
+    self.power_label = Label.new(x, y, "Enabled", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+    self.power = Toggle.new(x + label_w, y, math.floor(50 * ui_scale), math.floor(20 * ui_scale), {
+      value = true,
+      on_toggle = function(val) self:on_power_toggle(val) end,
+    })
+    y = y + row_h + 5
+
+    -- Resolution
+    self.res_label = Label.new(x, y, "Resolution", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+    self.resolutions = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
+      font_size = dd_font,
+      options = {},
+      on_change = function() self:on_resolution_change() end,
+    })
+    y = y + row_h + 5
+
+    -- Frequency
+    self.freq_label = Label.new(x, y, "Refresh", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+    self.frequencies = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
+      font_size = dd_font,
+      options = {},
+      on_change = function() end,
+    })
+    y = y + row_h + 5
+
+    -- Scale
+    self.scale_label = Label.new(x, y, "Scale", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+    self.scale = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
+      font_size = dd_font,
+      options = {
+        { name = "0.5", value = 0.5 },
+        { name = "0.75", value = 0.75 },
+        { name = "1.0", value = 1.0 },
+        { name = "1.25", value = 1.25 },
+        { name = "1.5", value = 1.5 },
+        { name = "2.0", value = 2.0 },
+      },
+      on_change = function() self:on_scale_change() end,
+    })
+    y = y + row_h + 5
+
+    -- Rotation
+    self.rot_label = Label.new(x, y, "Rotation", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+    self.rotation = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
+      font_size = dd_font,
+      options = {
+        { name = "0 (normal)", value = 0 },
+        { name = "1 (90 CW)", value = 1 },
+        { name = "2 (180)", value = 2 },
+        { name = "3 (90 CCW)", value = 3 },
+        { name = "4 (flip H)", value = 4 },
+        { name = "5 (flip V)", value = 5 },
+      },
+      on_change = function() self:on_rotation_change() end,
+    })
+    y = y + row_h + 10
+
+    -- Apply section
+    local apply_w = math.floor((cw - MARGIN) / 2)
+    local apply_h = math.floor(35 * ui_scale)
+    self.btn_apply = Button.new(x, y, apply_w, apply_h, "Apply", {
+      font_size = btn_font,
+      color = { 0.2, 0.5, 0.3 },
+      hover_color = { 0.25, 0.6, 0.35 },
+      on_click = function() self:on_apply() end,
+    })
+    self.btn_center = Button.new(x + apply_w + MARGIN, y, apply_w, apply_h, "Center", {
+      font_size = btn_font,
+      on_click = function() if self.on_center then self.on_center() end end,
+    })
+    y = y + apply_h + 10
+
+    self.screen_widgets = {
+      self.resolutions, self.frequencies, self.scale, self.rotation,
+      self.power, self.btn_apply, self.btn_center,
+    }
+  end
+
+  -- Combine all widgets for event dispatch
+  for _, w in ipairs(general_widgets) do
+    table.insert(self.widgets, w)
+  end
+  for _, w in ipairs(self.screen_widgets) do
+    table.insert(self.widgets, w)
+  end
+
+  -- Status (always at bottom)
+  self.status = Label.new(x, y, "", { width = cw, height = 20, font_size = math.floor(14 * ui_scale), color = { 1, 0.9, 0.5 } })
 end
 
 function PANEL:set_screen(gs, scale_factor)
+  local was_visible = self.screen_settings_visible
   self.selected_gs = gs
-  if not gs then
-    self.screen_name:set_text("(no screen selected)")
-    for _, w in ipairs(self.widgets) do
-      w.enabled = false
+  self.screen_settings_visible = (gs ~= nil)
+
+  if self.screen_settings_visible ~= was_visible then
+    if self.on_visibility_changed then
+      self.on_visibility_changed()
     end
     return
   end
-  for _, w in ipairs(self.widgets) do
-    w.enabled = true
-  end
-  local screen = gs.screen
 
+  if not gs then
+    return
+  end
+
+  local screen = gs.screen
   self.screen_name:set_text(simplify_model_name(screen.name))
 
   -- Resolutions
@@ -567,20 +589,28 @@ function PANEL:draw()
   love.graphics.setColor(0.3, 0.3, 0.4)
   love.graphics.rectangle("line", self.x, self.y, self.w, self.h, 8, 8)
 
-  -- Draw all widgets
+  -- Draw all interactive widgets
   for _, w in ipairs(self.widgets) do
     w:draw()
   end
+
+  -- General labels
   self.title:draw()
-  self.screen_name:draw()
-  self.res_label:draw()
-  self.freq_label:draw()
-  self.scale_label:draw()
-  self.rot_label:draw()
-  self.power_label:draw()
   self.ss_label:draw()
   self.ui_label:draw()
   self.profile_label:draw()
+
+  -- Screen settings labels (conditional)
+  if self.screen_settings_visible then
+    self.screen_title:draw()
+    self.screen_name:draw()
+    self.power_label:draw()
+    self.res_label:draw()
+    self.freq_label:draw()
+    self.scale_label:draw()
+    self.rot_label:draw()
+  end
+
   self.status:draw()
 
   -- Draw overlays (dropdown options) on top of everything
