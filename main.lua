@@ -414,6 +414,10 @@ function love.mousemoved(x, y)
 end
 
 function love.wheelmoved(_, dy)
+  -- Panel scrolls its own content when hovered; otherwise the wheel zooms the canvas
+  if panel:handle_scroll(dy) then
+    return
+  end
   local x = love.mouse.getX()
   if x < canvas_w() then
     change_canvas_scale(SCREEN_SCALE + dy)

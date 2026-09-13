@@ -43,9 +43,19 @@ function M.make_commands(gui_screens, canvas_scale)
       end
       local pos = string.format("%dx%d", math.floor(r.x), math.floor(r.y))
       local cmd = string.format(
-        "hl.monitor({output='%s', mode='%s', position='%s', scale=%.6f, transform=%d})",
+        "hl.monitor({output='%s', mode='%s', position='%s', scale=%.6f, transform=%d",
         screen.uid, mode_str, pos, screen.scale, screen.transform
       )
+      if screen.hdr_enabled then
+        cmd = cmd .. string.format(
+          ", bitdepth=10, cm='%s', sdrbrightness=%.2f, sdrsaturation=%.2f, sdr_eotf='%s'",
+          screen.cm or "auto",
+          screen.sdrbrightness or 1.0,
+          screen.sdrsaturation or 1.0,
+          screen.sdr_eotf or "default"
+        )
+      end
+      cmd = cmd .. "}"
       table.insert(cmds, cmd)
     else
       local cmd = string.format("hl.monitor({output='%s', disabled=true})", screen.uid)

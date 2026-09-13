@@ -76,6 +76,33 @@ local function get_closest_match(values, target)
   return best_idx
 end
 
+local CM_OPTIONS = {
+  { name = "auto", value = "auto" },
+  { name = "srgb", value = "srgb" },
+  { name = "dcip3", value = "dcip3" },
+  { name = "dp3", value = "dp3" },
+  { name = "adobe", value = "adobe" },
+  { name = "wide", value = "wide" },
+  { name = "edid", value = "edid" },
+  { name = "hdr", value = "hdr" },
+  { name = "hdredid", value = "hdredid" },
+}
+
+local SDR_EOTF_OPTIONS = {
+  { name = "default", value = "default" },
+  { name = "srgb", value = "srgb" },
+  { name = "gamma22", value = "gamma22" },
+}
+
+local function find_option_index(options, value)
+  for i, o in ipairs(options) do
+    if o.value == value then
+      return i
+    end
+  end
+  return 1
+end
+
 local function simplify_model_name(name)
   local words = {}
   local seen = {}
@@ -97,7 +124,40 @@ function PANEL.new()
   self.selected_gs = nil
   self.screen_settings_visible = false
   self.attract_enabled = true
+  self.scroll = 0
+  self._max_scroll = 0
+  self._scroll_widgets = {}
+  self._view_top = 0
+  self._view_h = 0
   return self
+end
+
+-- Shift all scrollable content widgets up by the current scroll offset.
+function PANEL:apply_scroll()
+  for _, item in ipairs(self._scroll_widgets) do
+    item.widget.rect.y = item.base_y - self.scroll
+  end
+end
+
+-- Returns true if the mouse is over the panel.
+function PANEL:hovered(mx, my)
+  return self.visible and mx >= self.x and mx <= self.x + self.w and my >= self.y and my <= self.y + self.h
+end
+
+-- Handle a vertical wheel event while hovering the panel.
+-- Returns true if the event was consumed by the panel.
+function PANEL:handle_scroll(dy)
+  if not self.visible then return false end
+  local mx, my = love.mouse.getX(), love.mouse.getY()
+  if not self:hovered(mx, my) then return false end
+  if self._max_scroll <= 0 then return true end
+  local new_scroll = self.scroll - dy * 40
+  new_scroll = math.max(0, math.min(self._max_scroll, new_scroll))
+  if new_scroll ~= self.scroll then
+    self.scroll = new_scroll
+    self:apply_scroll()
+  end
+  return true
 end
 
 function PANEL:layout(win_w, win_h)
@@ -255,7 +315,51 @@ function PANEL:layout(win_w, win_h)
       },
       on_change = function() self:on_rotation_change() end,
     })
-    y = y + row_h + 10
+    y = y + row_h + 5
+
+    -- HDR (master toggle: enables 10 bit + color management + SDR options)
+    self.hdr_label = Label.new(x, y, "HDR", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+    self.hdr = Toggle.new(x + label_w, y, math.floor(50 * ui_scale), math.floor(20 * ui_scale), {
+      value = false,
+      on_toggle = function(val) self:on_hdr_toggle(val) end,
+    })
+    y = y + row_h + 5
+
+    -- HDR sub-options (only shown when HDR is enabled)
+    local hdr_on = self.selected_gs and self.selected_gs.screen.hdr_enabled
+    self._hdr_sub_visible = hdr_on
+    if hdr_on then
+      self.cm_label = Label.new(x, y, "CM", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+      self.cm = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
+        font_size = dd_font,
+        options = CM_OPTIONS,
+        on_change = function() self:on_cm_change() end,
+      })
+      y = y + row_h + 5
+
+      self.sdrb_label = Label.new(x, y, "SDR Bright", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+      self.sdrbrightness = Slider.new(x + label_w, y, cw - label_w, row_h, {
+        min = 0.0, max = 3.0, step = 0.01, value = 1.0, scale = ui_scale,
+        on_change = function(val) self:on_sdrbrightness_change(val) end,
+      })
+      y = y + row_h + 5
+
+      self.sdrs_label = Label.new(x, y, "SDR Sat", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+      self.sdrsaturation = Slider.new(x + label_w, y, cw - label_w, row_h, {
+        min = 0.0, max = 3.0, step = 0.01, value = 1.0, scale = ui_scale,
+        on_change = function(val) self:on_sdrsaturation_change(val) end,
+      })
+      y = y + row_h + 5
+
+      self.sdr_eotf_label = Label.new(x, y, "SDR EOTF", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+      self.sdr_eotf = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
+        font_size = dd_font,
+        options = SDR_EOTF_OPTIONS,
+        on_change = function() self:on_sdr_eotf_change() end,
+      })
+      y = y + row_h + 5
+    end
+    y = y + 5
 
     -- Apply section
     local apply_w = math.floor((cw - MARGIN) / 2)
@@ -274,8 +378,14 @@ function PANEL:layout(win_w, win_h)
 
     self.screen_widgets = {
       self.resolutions, self.frequencies, self.scale, self.rotation,
-      self.power, self.btn_apply, self.btn_center,
+      self.power, self.hdr, self.btn_apply, self.btn_center,
     }
+    if hdr_on then
+      table.insert(self.screen_widgets, self.cm)
+      table.insert(self.screen_widgets, self.sdrbrightness)
+      table.insert(self.screen_widgets, self.sdrsaturation)
+      table.insert(self.screen_widgets, self.sdr_eotf)
+    end
   end
 
   -- Combine all widgets for event dispatch
@@ -286,8 +396,57 @@ function PANEL:layout(win_w, win_h)
     table.insert(self.widgets, w)
   end
 
-  -- Status (always at bottom)
-  self.status = Label.new(x, y, "", { width = cw, height = 20, font_size = math.floor(14 * ui_scale), color = { 1, 0.9, 0.5 } })
+  -- Content bottom (Y after the last content row, before the status bar)
+  local content_bottom = y
+  self._view_top = self.y + margin
+  local interior_h = self.h - 2 * margin
+
+  -- Track base positions of every scrollable widget (interactive + labels)
+  self._scroll_widgets = {}
+  local function track(w)
+    if w then table.insert(self._scroll_widgets, { widget = w, base_y = w.rect.y }) end
+  end
+  for _, w in ipairs(self.widgets) do track(w) end
+  track(self.title)
+  track(self.ss_label)
+  track(self.ui_label)
+  track(self.attract_label)
+  track(self.profile_label)
+  if self.screen_settings_visible then
+    track(self.screen_title)
+    track(self.screen_name)
+    track(self.power_label)
+    track(self.res_label)
+    track(self.freq_label)
+    track(self.scale_label)
+    track(self.rot_label)
+    track(self.hdr_label)
+    if self._hdr_sub_visible then
+      track(self.cm_label)
+      track(self.sdrb_label)
+      track(self.sdrs_label)
+      track(self.sdr_eotf_label)
+    end
+  end
+
+  local status_h = 20
+  local content_h = content_bottom - self._view_top
+  if content_h <= interior_h then
+    -- Everything fits: status sits right after the content, no scrolling
+    self.status = Label.new(x, content_bottom, "", { width = cw, height = status_h, font_size = math.floor(14 * ui_scale), color = { 1, 0.9, 0.5 } })
+    self._view_h = interior_h
+    self._max_scroll = 0
+    self.scroll = 0
+  else
+    -- Content overflows: pin status at the bottom, scroll the content above it
+    local status_y = self.y + self.h - margin - status_h
+    self.status = Label.new(x, status_y, "", { width = cw, height = status_h, font_size = math.floor(14 * ui_scale), color = { 1, 0.9, 0.5 } })
+    local gap = 8
+    self._view_h = math.max(0, status_y - self._view_top - gap)
+    self._max_scroll = math.max(0, content_h - self._view_h)
+    self.scroll = math.max(0, math.min(self.scroll, self._max_scroll))
+  end
+  self:apply_scroll()
 end
 
 function PANEL:set_screen(gs, scale_factor)
@@ -334,6 +493,22 @@ function PANEL:set_screen(gs, scale_factor)
 
   -- Power
   self.power.toggled = screen.active
+
+  -- HDR
+  self.hdr.toggled = screen.hdr_enabled
+  -- If the panel was laid out with a different HDR state, re-layout to show/hide sub-widgets
+  if (screen.hdr_enabled and not self._hdr_sub_visible) or (not screen.hdr_enabled and self._hdr_sub_visible) then
+    if self.on_visibility_changed then
+      self.on_visibility_changed()
+    end
+    return
+  end
+  if screen.hdr_enabled then
+    self.cm.selected_index = find_option_index(CM_OPTIONS, screen.cm or "auto")
+    self.sdrbrightness.value = screen.sdrbrightness or 1.0
+    self.sdrsaturation.value = screen.sdrsaturation or 1.0
+    self.sdr_eotf.selected_index = find_option_index(SDR_EOTF_OPTIONS, screen.sdr_eotf or "default")
+  end
 end
 
 function PANEL:update_frequencies()
@@ -425,6 +600,45 @@ function PANEL:on_power_toggle(val)
   gs.screen.active = val
 end
 
+function PANEL:on_hdr_toggle(val)
+  local gs = self.selected_gs
+  if not gs then return end
+  gs.screen.hdr_enabled = val
+  if self.on_visibility_changed then
+    self.on_visibility_changed()
+  end
+end
+
+function PANEL:on_cm_change()
+  local gs = self.selected_gs
+  if not gs then return end
+  local opt = self.cm:get_selected()
+  if opt then
+    gs.screen.cm = opt.value
+  end
+end
+
+function PANEL:on_sdrbrightness_change(val)
+  local gs = self.selected_gs
+  if not gs then return end
+  gs.screen.sdrbrightness = val
+end
+
+function PANEL:on_sdrsaturation_change(val)
+  local gs = self.selected_gs
+  if not gs then return end
+  gs.screen.sdrsaturation = val
+end
+
+function PANEL:on_sdr_eotf_change()
+  local gs = self.selected_gs
+  if not gs then return end
+  local opt = self.sdr_eotf:get_selected()
+  if opt then
+    gs.screen.sdr_eotf = opt.value
+  end
+end
+
 function PANEL:on_attract_toggle(val)
   self.attract_enabled = val
   if self.on_attract_toggle then
@@ -491,6 +705,11 @@ function PANEL:_do_save_profile(name)
       } or nil,
       scale = screen.scale,
       transform = screen.transform,
+      hdr_enabled = screen.hdr_enabled,
+      cm = screen.cm,
+      sdrbrightness = screen.sdrbrightness,
+      sdrsaturation = screen.sdrsaturation,
+      sdr_eotf = screen.sdr_eotf,
       position = {
         x = math.floor(gs.target_rect.x * self.screen_scale.value),
         y = math.floor(gs.target_rect.y * self.screen_scale.value),
@@ -529,6 +748,11 @@ function PANEL:on_load_profile()
         gs.screen.active = saved.active
         gs.screen.scale = saved.scale or 1
         gs.screen.transform = saved.transform or 0
+        gs.screen.hdr_enabled = saved.hdr_enabled or false
+        gs.screen.cm = saved.cm or "auto"
+        gs.screen.sdrbrightness = saved.sdrbrightness or 1.0
+        gs.screen.sdrsaturation = saved.sdrsaturation or 1.0
+        gs.screen.sdr_eotf = saved.sdr_eotf or "default"
         if saved.mode then
           local mode = find_matching_mode(gs.screen.available, saved.mode.width, saved.mode.height, saved.mode.freq)
           if mode then
@@ -557,6 +781,9 @@ function PANEL:on_load_profile()
   self.status:set_text("Loaded: " .. name)
   if self.on_screen_changed then
     self.on_screen_changed()
+  end
+  if self.on_visibility_changed then
+    self.on_visibility_changed()
   end
 end
 
@@ -616,6 +843,11 @@ function PANEL:draw()
   love.graphics.setColor(0.3, 0.3, 0.4)
   love.graphics.rectangle("line", self.x, self.y, self.w, self.h, 8, 8)
 
+  -- Scrollable content, clipped to the viewport (panel top .. just above the status bar).
+  -- Note: setScissor must be reset explicitly afterwards - LÖVE's push/pop does NOT restore it.
+  local clip_h = self._view_top + self._view_h - self.y
+  love.graphics.setScissor(self.x, self.y, self.w, clip_h)
+
   -- Draw all interactive widgets
   for _, w in ipairs(self.widgets) do
     w:draw()
@@ -637,7 +869,16 @@ function PANEL:draw()
     self.freq_label:draw()
     self.scale_label:draw()
     self.rot_label:draw()
+    self.hdr_label:draw()
+    if self.selected_gs and self.selected_gs.screen.hdr_enabled then
+      self.cm_label:draw()
+      self.sdrb_label:draw()
+      self.sdrs_label:draw()
+      self.sdr_eotf_label:draw()
+    end
   end
+
+  love.graphics.setScissor()  -- reset so the clip doesn't leak onto the canvas
 
   self.status:draw()
 

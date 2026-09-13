@@ -24,6 +24,11 @@ function Screen.new(opts)
     scale = opts.scale or 1,
     available = opts.available or {},
     transform = opts.transform or 0,
+    hdr_enabled = opts.hdr_enabled or false,
+    cm = opts.cm or "auto",
+    sdrbrightness = opts.sdrbrightness or 1.0,
+    sdrsaturation = opts.sdrsaturation or 1.0,
+    sdr_eotf = opts.sdr_eotf or "default",
   }, Screen)
 end
 
