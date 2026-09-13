@@ -11,6 +11,7 @@ local CONFIRM_DELAY = 20
 local gui_screens = {}
 local selected = nil
 local dragging = false
+local drag_moved = false
 local drag_offset = { 0, 0 }
 local status_msg = ""
 local status_timer = 0
@@ -267,7 +268,12 @@ end
 
 function love.mousemoved(x, y)
   if dragging and selected then
-    selected:set_position(x - drag_offset[1], y - drag_offset[2])
+    local nx = x - drag_offset[1]
+    local ny = y - drag_offset[2]
+    if nx ~= selected.rect.x or ny ~= selected.rect.y then
+      drag_moved = true
+    end
+    selected:set_position(nx, ny)
   else
     panel:on_move(x, y)
   end
@@ -286,6 +292,7 @@ function love.mousepressed(x, y, button)
     if gs.rect:contains(x, y) then
       selected = gs
       dragging = true
+      drag_moved = false
       drag_offset[1] = x - gs.rect.x
       drag_offset[2] = y - gs.rect.y
       gui_screens[i] = table.remove(gui_screens, i)
@@ -301,7 +308,7 @@ end
 function love.mousereleased(x, y, button)
   if button ~= 1 then return end
   panel:on_release(x, y)
-  if dragging and selected then
+  if dragging and selected and drag_moved then
     on_release_snap()
   end
   dragging = false
