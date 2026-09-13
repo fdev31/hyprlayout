@@ -1,4 +1,5 @@
 local Widget = require("widgets.widget")
+local Anim = require("widgets.anim")
 
 local Button = Widget:extend("Button")
 
@@ -19,6 +20,7 @@ function Button.new(x, y, w, h, text, opts)
   self._font = love.graphics.newFont(self.font_size)
   self._hover = false
   self._pressed = false
+  self._col = Anim.AnimColor.new(self.color[1], self.color[2], self.color[3])
   return self
 end
 
@@ -47,13 +49,19 @@ function Button:on_move(x, y)
 end
 
 function Button:draw()
-  local c = self.color
+  -- Determine target color
+  local tr, tg, tb
   if self._pressed then
-    c = self.active_color
+    tr, tg, tb = self.active_color[1], self.active_color[2], self.active_color[3]
   elseif self._hover then
-    c = self.hover_color
+    tr, tg, tb = self.hover_color[1], self.hover_color[2], self.hover_color[3]
+  else
+    tr, tg, tb = self.color[1], self.color[2], self.color[3]
   end
-  love.graphics.setColor(c[1], c[2], c[3])
+  self._col.tr, self._col.tg, self._col.tb = tr, tg, tb
+  self._col:advance()
+
+  love.graphics.setColor(self._col.r, self._col.g, self._col.b)
   love.graphics.rectangle("fill", self.rect.x, self.rect.y, self.rect.width, self.rect.height)
   love.graphics.setColor(1, 1, 1)
   love.graphics.setFont(self._font)

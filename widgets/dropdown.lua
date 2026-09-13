@@ -1,4 +1,5 @@
 local Widget = require("widgets.widget")
+local Anim = require("widgets.anim")
 
 local Dropdown = Widget:extend("Dropdown")
 
@@ -21,6 +22,7 @@ function Dropdown.new(x, y, w, h, opts)
   self._hover = false
   self._hover_option = -1
   self._pressed = false
+  self._expand = Anim.AnimFloat.new(0)
   return self
 end
 
@@ -123,23 +125,36 @@ function Dropdown:draw()
   local ty = r.y + (r.height - self.font_size) / 2
   love.graphics.print(text, tx, ty)
 
-  -- Arrow
+  -- Arrow (animated rotation via expand value)
   local ax = r.x + r.width - 15
   local ay = r.y + r.height / 2
   love.graphics.setColor(TEXT_COLOR[1], TEXT_COLOR[2], TEXT_COLOR[3])
-  if self._open then
+  local exp = self._expand.value
+  if exp > 0.5 then
     love.graphics.polygon("fill", ax, ay + 3, ax + 6, ay + 3, ax + 3, ay - 3)
   else
     love.graphics.polygon("fill", ax, ay - 3, ax + 6, ay - 3, ax + 3, ay + 3)
   end
-
 end
 
 function Dropdown:draw_overlay()
-  if not self._open then return end
+  -- Advance expand animation
+  self._expand.target = self._open and 1 or 0
+  self._expand:advance()
+
+  local exp = self._expand.value
+  if exp < 0.01 then return end
+
   local r = self.rect
   love.graphics.setFont(self._font)
   local opt_h = r.height
+  local total_h = #self.options * opt_h
+  local visible_h = total_h * exp
+
+  -- Scissor to clip the expanding list
+  love.graphics.push()
+  love.graphics.setScissor(r.x, r.y + r.height, r.width, visible_h)
+
   for i = 1, #self.options do
     local oy = r.y + i * opt_h
     local opt = self.options[i]
@@ -159,6 +174,8 @@ function Dropdown:draw_overlay()
     love.graphics.setColor(TEXT_COLOR[1], TEXT_COLOR[2], TEXT_COLOR[3])
     love.graphics.print(name, r.x + 8, oy + (opt_h - self.font_size) / 2)
   end
+
+  love.graphics.pop()
 end
 
 return Dropdown

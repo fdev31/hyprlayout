@@ -1,4 +1,5 @@
 local Widget = require("widgets.widget")
+local Anim = require("widgets.anim")
 
 local Slider = Widget:extend("Slider")
 
@@ -22,6 +23,7 @@ function Slider.new(x, y, w, h, opts)
   self.scale = opts.scale or 1.0
   self.font_size = math.floor(12 * self.scale)
   self._font = love.graphics.newFont(self.font_size)
+  self._display = Anim.AnimFloat.new(self.value)
   return self
 end
 
@@ -72,13 +74,23 @@ function Slider:draw()
   local r = self.rect
   love.graphics.setFont(self._font)
 
+  -- Animate display value toward actual value
+  if self._dragging then
+    self._display:snap(self.value)
+  else
+    self._display.target = self.value
+    self._display:advance()
+  end
+
   local track_h = math.max(2, math.floor(4 * self.scale))
   local track_y = r.y + r.height / 2 - track_h / 2
 
   love.graphics.setColor(TRACK_COLOR[1], TRACK_COLOR[2], TRACK_COLOR[3])
   love.graphics.rectangle("fill", r.x, track_y, r.width, track_h, 2, 2)
 
-  local ratio = (self.value - self.min) / (self.max - self.min)
+  local disp = self._display.value
+  local ratio = (disp - self.min) / (self.max - self.min)
+  ratio = math.max(0, math.min(1, ratio))
   local fill_w = ratio * r.width
   love.graphics.setColor(FILL_COLOR[1], FILL_COLOR[2], FILL_COLOR[3])
   if fill_w > 0 then

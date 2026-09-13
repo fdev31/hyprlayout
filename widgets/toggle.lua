@@ -1,4 +1,5 @@
 local Widget = require("widgets.widget")
+local Anim = require("widgets.anim")
 
 local Toggle = Widget:extend("Toggle")
 
@@ -13,6 +14,12 @@ function Toggle.new(x, y, w, h, opts)
   self.toggled = opts.value or false
   self.on_toggle = opts.on_toggle or function() end
   self._hover = false
+  self._knob_pos = Anim.AnimFloat.new(self.toggled and 1 or 0)
+  self._track_col = Anim.AnimColor.new(
+    self.toggled and ON_COLOR[1] or OFF_COLOR[1],
+    self.toggled and ON_COLOR[2] or OFF_COLOR[2],
+    self.toggled and ON_COLOR[3] or OFF_COLOR[3]
+  )
   return self
 end
 
@@ -35,19 +42,23 @@ function Toggle:draw()
   local w = r.width
   local radius = h / 2
 
-  love.graphics.setColor(
-    self.toggled and ON_COLOR[1] or OFF_COLOR[1],
-    self.toggled and ON_COLOR[2] or OFF_COLOR[2],
-    self.toggled and ON_COLOR[3] or OFF_COLOR[3]
-  )
+  -- Set animation targets
+  if self.toggled then
+    self._knob_pos.target = 1
+    self._track_col.tr, self._track_col.tg, self._track_col.tb = ON_COLOR[1], ON_COLOR[2], ON_COLOR[3]
+  else
+    self._knob_pos.target = 0
+    self._track_col.tr, self._track_col.tg, self._track_col.tb = OFF_COLOR[1], OFF_COLOR[2], OFF_COLOR[3]
+  end
+  self._knob_pos:advance()
+  self._track_col:advance()
+
+  -- Track
+  love.graphics.setColor(self._track_col.r, self._track_col.g, self._track_col.b)
   love.graphics.rectangle("fill", r.x, r.y, w, h, radius, radius)
 
-  local knob_x
-  if self.toggled then
-    knob_x = r.x + w - radius
-  else
-    knob_x = r.x + radius
-  end
+  -- Knob
+  local knob_x = r.x + radius + self._knob_pos.value * (w - 2 * radius)
   love.graphics.setColor(KNOB_COLOR[1], KNOB_COLOR[2], KNOB_COLOR[3])
   love.graphics.circle("fill", knob_x, r.y + radius, radius - 2)
 end
