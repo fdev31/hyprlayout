@@ -3,6 +3,7 @@ local Button = require("widgets.button")
 local Dropdown = require("widgets.dropdown")
 local Label = require("widgets.label")
 local Toggle = require("widgets.toggle")
+local Slider = require("widgets.slider")
 local Modal = require("widgets.modal")
 local profiles = require("core.profiles")
 local apply = require("core.apply")
@@ -174,29 +175,17 @@ function PANEL:layout(win_w, win_h)
 
   -- Screen Scale (canvas pixel ratio)
   self.ss_label = Label.new(x, y, "Canvas", { width = label_w, height = row_h })
-  self.screen_scale = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
-    options = {
-      { name = "4 (zoomed)", value = 4 },
-      { name = "6", value = 6 },
-      { name = "8 (default)", value = 8 },
-      { name = "10", value = 10 },
-      { name = "12", value = 12 },
-      { name = "16 (small)", value = 16 },
-    },
-    on_change = function() self:on_screen_scale_change() end,
+  self.screen_scale = Slider.new(x + label_w, y, cw - label_w, row_h, {
+    min = 4, max = 16, step = 1, value = 8,
+    on_change = function(val) self:on_screen_scale_change(val) end,
   })
   y = y + row_h + 5
 
   -- UI Scale
   self.ui_label = Label.new(x, y, "UI Scale", { width = label_w, height = row_h })
-  self.ui_scale = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
-    options = {
-      { name = "0.75 (compact)", value = 0.75 },
-      { name = "1.0 (default)", value = 1.0 },
-      { name = "1.25", value = 1.25 },
-      { name = "1.5 (large)", value = 1.5 },
-    },
-    on_change = function() self:on_ui_scale_change() end,
+  self.ui_scale = Slider.new(x + label_w, y, cw - label_w, row_h, {
+    min = 0.5, max = 2.0, step = 0.25, value = 1.0,
+    on_change = function(val) self:on_ui_scale_change(val) end,
   })
   y = y + row_h + 15
 
@@ -395,19 +384,15 @@ function PANEL:on_power_toggle(val)
   gs.screen.active = val
 end
 
-function PANEL:on_screen_scale_change()
-  local opt = self.screen_scale:get_selected()
-  if not opt then return end
+function PANEL:on_screen_scale_change(val)
   if self.on_screen_scale_change then
-    self.on_screen_scale_change(opt.value)
+    self.on_screen_scale_change(val)
   end
 end
 
-function PANEL:on_ui_scale_change()
-  local opt = self.ui_scale:get_selected()
-  if not opt then return end
+function PANEL:on_ui_scale_change(val)
   if self.on_ui_scale_change then
-    self.on_ui_scale_change(opt.value)
+    self.on_ui_scale_change(val)
   end
 end
 
@@ -581,6 +566,8 @@ function PANEL:draw()
   self.scale_label:draw()
   self.rot_label:draw()
   self.power_label:draw()
+  self.ss_label:draw()
+  self.ui_label:draw()
   self.profile_label:draw()
   self.status:draw()
 
