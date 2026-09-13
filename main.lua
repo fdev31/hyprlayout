@@ -194,7 +194,6 @@ local function layout_panel()
   panel.get_all_screens = function() return gui_screens end
   panel.on_screen_changed = on_screen_changed
   panel.on_screen_resized = on_screen_resized
-  panel.on_center = function() center_layout(true) end
   panel.on_apply_callback = function() action_apply() end
   panel.on_screen_scale_change = change_canvas_scale
   panel.on_ui_scale_change = function(val)

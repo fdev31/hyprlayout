@@ -185,6 +185,22 @@ function PANEL:layout(win_w, win_h)
   self.title = Label.new(x, y, "General", { width = cw, height = 20, font_size = math.floor(15 * ui_scale), align = "center" })
   y = y + math.floor(30 * ui_scale)
 
+  -- Reload / Apply (top row)
+  local top_btn_w = math.floor((cw - margin) / 2)
+  self.btn_reload = Button.new(x, y, top_btn_w, row_h, "Reload", {
+    font_size = btn_font,
+    on_click = function()
+      if self.on_reload then self.on_reload() end
+    end,
+  })
+  self.btn_apply = Button.new(x + top_btn_w + margin, y, top_btn_w, row_h, "Apply", {
+    font_size = btn_font,
+    color = { 0.2, 0.5, 0.3 },
+    hover_color = { 0.25, 0.6, 0.35 },
+    on_click = function() self:on_apply() end,
+  })
+  y = y + row_h + 15
+
   -- Canvas
   self.ss_label = Label.new(x, y, "Canvas", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
   local ss_val = self.screen_scale and self.screen_scale.value or PANEL.DEFAULT_CANVAS_SCALE
@@ -209,16 +225,6 @@ function PANEL:layout(win_w, win_h)
     on_toggle = function(val) self.on_attract_toggle(val) end,
   })
   y = y + row_h + 5
-
-  -- Reload
-  local reload_w = math.floor((cw - margin) / 2)
-  self.btn_reload = Button.new(x, y, reload_w, row_h, "Reload", {
-    font_size = btn_font,
-    on_click = function()
-      if self.on_reload then self.on_reload() end
-    end,
-  })
-  y = y + row_h + 15
 
   -- Profiles section
   self.profile_label = Label.new(x, y, "Profiles", { width = cw, height = 20, font_size = math.floor(14 * ui_scale) })
@@ -245,7 +251,8 @@ function PANEL:layout(win_w, win_h)
 
   -- General widgets
   local general_widgets = {
-    self.screen_scale, self.ui_scale, self.attract, self.btn_reload,
+    self.btn_reload, self.btn_apply,
+    self.screen_scale, self.ui_scale, self.attract,
     self.profiles_dd,
     self.btn_save, self.btn_load, self.btn_new, self.btn_delete,
   }
@@ -361,24 +368,9 @@ function PANEL:layout(win_w, win_h)
     end
     y = y + 5
 
-    -- Apply section
-    local apply_w = math.floor((cw - MARGIN) / 2)
-    local apply_h = math.floor(35 * ui_scale)
-    self.btn_apply = Button.new(x, y, apply_w, apply_h, "Apply", {
-      font_size = btn_font,
-      color = { 0.2, 0.5, 0.3 },
-      hover_color = { 0.25, 0.6, 0.35 },
-      on_click = function() self:on_apply() end,
-    })
-    self.btn_center = Button.new(x + apply_w + MARGIN, y, apply_w, apply_h, "Center", {
-      font_size = btn_font,
-      on_click = function() if self.on_center then self.on_center() end end,
-    })
-    y = y + apply_h + 10
-
     self.screen_widgets = {
       self.resolutions, self.frequencies, self.scale, self.rotation,
-      self.power, self.hdr, self.btn_apply, self.btn_center,
+      self.power, self.hdr,
     }
     if hdr_on then
       table.insert(self.screen_widgets, self.cm)
