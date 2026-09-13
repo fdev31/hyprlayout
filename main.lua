@@ -326,14 +326,37 @@ function love.draw()
     local win_w = love.graphics.getWidth()
     local win_h = love.graphics.getHeight()
 
+    -- Dim overlay
+    love.graphics.setColor(0, 0, 0, 0.6)
+    love.graphics.rectangle("fill", 0, 0, win_w, win_h)
+
+    -- Modal box
+    local mw, mh = 360, 160
+    local mx, my = (win_w - mw) / 2, (win_h - mh) / 2
+    love.graphics.setColor(0.15, 0.15, 0.2, 1)
+    love.graphics.rectangle("fill", mx, my, mw, mh, 8, 8)
+    love.graphics.setColor(0.4, 0.4, 0.5)
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle("line", mx, my, mw, mh, 8, 8)
+
+    -- Title
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.printf("Apply layout?", mx, my + 20, mw, "center")
+
+    -- Progress bar
+    local bar_w, bar_h = mw - 60, 12
+    local bar_x, bar_y = mx + 30, my + 60
+    love.graphics.setColor(0.3, 0.3, 0.35)
+    love.graphics.rectangle("fill", bar_x, bar_y, bar_w, bar_h, 4, 4)
     local bar_color_r = 50 + math.floor(200 * (1.0 - ratio)) / 255
     local bar_color_g = math.floor(200 * ratio) / 255
     love.graphics.setColor(bar_color_r, bar_color_g, 0.4)
-    love.graphics.rectangle("fill", 0, math.floor(win_h / 2) - 40, math.floor(win_w * ratio), 10)
+    love.graphics.rectangle("fill", bar_x, bar_y, math.max(bar_h, math.floor(bar_w * ratio)), bar_h, 4, 4)
 
-    love.graphics.setColor(0.8, 0.8, 0.8)
-    love.graphics.print("Press ENTER", 20, math.floor(win_h / 2) + 40)
-    love.graphics.print("to confirm (or ESC to abort)", 20, math.floor(win_h / 2))
+    -- Instructions
+    love.graphics.setColor(0.7, 0.7, 0.7)
+    love.graphics.printf("ENTER to confirm  |  ESC to abort", mx, my + 100, mw, "center")
+    love.graphics.printf(string.format("%.1fs", remaining), mx, my + 125, mw, "center")
   else
     local info = string.format("hyprlayout | %d screens | drag to move | ENTER=apply R=reload TAB=profile ESC=quit",
       #gui_screens)
