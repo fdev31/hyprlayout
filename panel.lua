@@ -175,8 +175,9 @@ function PANEL:layout(win_w, win_h)
 
   -- Screen Scale (canvas pixel ratio)
   self.ss_label = Label.new(x, y, "Canvas", { width = label_w, height = row_h })
+  local ss_val = self.screen_scale and self.screen_scale.value or 4
   self.screen_scale = Slider.new(x + label_w, y, cw - label_w, row_h, {
-    min = 2, max = 16, step = 1, value = 4,
+    min = 2, max = 16, step = 1, value = ss_val,
     on_change = function(val) self.on_screen_scale_change(val) end,
   })
   y = y + row_h + 5
@@ -184,7 +185,7 @@ function PANEL:layout(win_w, win_h)
   -- UI Scale
   self.ui_label = Label.new(x, y, "UI Scale", { width = label_w, height = row_h })
   self.ui_scale = Slider.new(x + label_w, y, cw - label_w, row_h, {
-    min = 0.5, max = 2.0, step = 0.25, value = 1.0,
+    min = 0.5, max = 2.0, step = 0.25, value = self.ui_scale_factor or 1.0,
     on_change = function(val) self.on_ui_scale_change(val) end,
   })
   y = y + row_h + 15
