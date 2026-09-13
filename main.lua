@@ -26,6 +26,7 @@ local shot_thread = nil
 local shot_channel = nil
 local shot_timer = 0
 local shot_images = {}
+local help_visible = false
 
 local function get_screen_size(screen)
   if not screen.mode then
@@ -335,6 +336,117 @@ function love.update(dt)
   end
 end
 
+-- Draw a keycap (rounded box around a key label). Returns the cap width.
+local function draw_keycap(x, y, label, font)
+  local pad = 7
+  local tw = font:getWidth(label)
+  local th = font:getHeight()
+  local w = tw + pad * 2
+  local h = th + 8
+  love.graphics.setColor(0.24, 0.24, 0.31)
+  love.graphics.rectangle("fill", x, y, w, h, 3, 3)
+  love.graphics.setColor(0.45, 0.45, 0.55)
+  love.graphics.setLineWidth(1)
+  love.graphics.rectangle("line", x, y, w, h, 3, 3)
+  love.graphics.setColor(0.92, 0.92, 0.92)
+  love.graphics.print(label, x + pad, y + 4)
+  return w
+end
+
+local function draw_help()
+  local win_w = love.graphics.getWidth()
+  local win_h = love.graphics.getHeight()
+  local font = love.graphics.getFont()
+
+  local key_rows = {
+    { keys = { "ENTER" }, action = "Apply layout" },
+    { keys = { "R" }, action = "Reload screens" },
+    { keys = { "TAB" }, action = "Cycle profile" },
+    { keys = { "F1", "?" }, action = "Toggle this help" },
+    { keys = { "ESC" }, action = "Close help / Quit" },
+  }
+  local mouse_rows = {
+    { keys = { "drag" }, action = "Move a screen" },
+    { keys = { "wheel" }, action = "Zoom canvas / scroll panel" },
+  }
+
+  local row_h, pad = 28, 24
+  local header_h, section_gap, footer_h = 46, 42, 34
+  local mw = 340
+  local mh = header_h + #key_rows * row_h + section_gap + #mouse_rows * row_h + footer_h
+  local mx = (win_w - mw) / 2
+  local my = (win_h - mh) / 2
+
+  -- Dim + box
+  love.graphics.setColor(0, 0, 0, 0.55)
+  love.graphics.rectangle("fill", 0, 0, win_w, win_h)
+  love.graphics.setColor(0.13, 0.13, 0.18)
+  love.graphics.rectangle("fill", mx, my, mw, mh, 10, 10)
+  love.graphics.setColor(0.4, 0.4, 0.5)
+  love.graphics.setLineWidth(1)
+  love.graphics.rectangle("line", mx, my, mw, mh, 10, 10)
+
+  love.graphics.setColor(0.92, 0.92, 0.92)
+  love.graphics.print("Shortcuts", mx + pad, my + 14)
+
+  local y = my + header_h
+  local function draw_row(row)
+    local kx = mx + pad
+    for _, k in ipairs(row.keys) do
+      kx = kx + draw_keycap(kx, y, k, font) + 6
+    end
+    love.graphics.setColor(0.7, 0.7, 0.75)
+    love.graphics.print(row.action, mx + pad + 116, y + 4)
+    y = y + row_h
+  end
+  for _, row in ipairs(key_rows) do draw_row(row) end
+
+  love.graphics.setColor(0.3, 0.3, 0.4)
+  love.graphics.rectangle("fill", mx + pad, y, mw - pad * 2, 1)
+  y = y + 14
+  love.graphics.setColor(0.55, 0.55, 0.6)
+  love.graphics.print("Mouse", mx + pad, y + 4)
+  y = y + row_h
+  for _, row in ipairs(mouse_rows) do draw_row(row) end
+
+  love.graphics.setColor(0.5, 0.5, 0.55)
+  love.graphics.print("F1 / ? / ESC / click to close", mx + pad, my + mh - 22)
+end
+
+-- Show a "drag to move" hint on the screen currently under the mouse.
+local function draw_drag_hint()
+  if dragging then return end
+  local mx, my = love.mouse.getX(), love.mouse.getY()
+  for i = #gui_screens, 1, -1 do
+    local gs = gui_screens[i]
+    if gs.rect:contains(mx, my) then
+      local r = gs.rect
+      local label = "drag to move"
+      local font = love.graphics.getFont()
+      local tw = font:getWidth(label)
+      local th = font:getHeight()
+      local pw, ph = tw + 20, th + 10
+      local px = r.x + r.width / 2 - pw / 2
+      local py = r.y + 8
+      if r.height > ph + 16 then
+        love.graphics.setColor(0, 0, 0, 0.55)
+        love.graphics.rectangle("fill", px, py, pw, ph, 5, 5)
+        love.graphics.setColor(0.85, 0.85, 0.88)
+        love.graphics.print(label, px + 10, py + 5)
+      end
+      break
+    end
+  end
+end
+
+-- Hit/draw rect for the corner "?" help button (top-right of the canvas).
+local function help_btn_rect()
+  local font = love.graphics.getFont()
+  local w = font:getWidth("?") + 14
+  local h = font:getHeight() + 8
+  return canvas_w() - w - 10, 10, w, h
+end
+
 function love.draw()
   love.graphics.clear(0.2, 0.2, 0.2)
 
@@ -394,14 +506,25 @@ function love.draw()
     love.graphics.printf("ENTER to confirm  |  ESC to abort", mx, my + 100, mw, "center")
     love.graphics.printf(string.format("%.1fs", remaining), mx, my + 125, mw, "center")
   else
-    local info = string.format("hyprlayout | %d screens | drag to move | ENTER=apply R=reload TAB=profile ESC=quit",
-      #gui_screens)
-    love.graphics.setColor(0.8, 0.8, 0.8)
-    love.graphics.print(info, 10, 10)
+    local font = love.graphics.getFont()
+
+    -- Compact "?" button (top-right of the canvas) to open the help overlay
+    local bx, by, bw, bh = help_btn_rect()
+    draw_keycap(bx, by, "?", font)
+
+    draw_drag_hint()
 
     if status_msg ~= "" then
+      local sw = font:getWidth(status_msg)
+      local sh = font:getHeight()
+      love.graphics.setColor(0, 0, 0, 0.5)
+      love.graphics.rectangle("fill", 8, 8, sw + 20, sh + 12, 6, 6)
       love.graphics.setColor(1, 0.9, 0.5)
-      love.graphics.print(status_msg, 10, 30)
+      love.graphics.print(status_msg, 18, 14)
+    end
+
+    if help_visible then
+      draw_help()
     end
   end
 end
@@ -438,6 +561,17 @@ end
 
 function love.mousepressed(x, y, button)
   if button ~= 1 then return end
+
+  -- Help overlay: any click dismisses it; the corner "?" button opens it
+  if help_visible then
+    help_visible = false
+    return
+  end
+  local bx, by, bw, bh = help_btn_rect()
+  if x >= bx and x <= bx + bw and y >= by and y <= by + bh then
+    help_visible = true
+    return
+  end
 
   -- Panel gets priority
   if panel:on_press(x, y) then
@@ -486,6 +620,13 @@ function love.keypressed(key)
   if panel:modal_keypressed(key) then
     return
   end
+  -- F1 / ? toggle the (non-blocking) help overlay
+  local is_help_key = key == "f1"
+    or (key == "slash" and (love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift")))
+  if is_help_key then
+    help_visible = not help_visible
+    return
+  end
   if key == "return" or key == "kpenter" then
     if confirm_start > 0 then
       confirm_start = 0
@@ -496,7 +637,9 @@ function love.keypressed(key)
       action_apply()
     end
   elseif key == "escape" then
-    if confirm_start > 0 then
+    if help_visible then
+      help_visible = false
+    elseif confirm_start > 0 then
       revert_layout("Reverted")
     else
       love.event.quit()
