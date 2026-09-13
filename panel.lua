@@ -152,7 +152,9 @@ function PANEL:layout(win_w, win_h)
   local reload_w = math.floor((cw - margin) / 2)
   self.btn_reload = Button.new(x, y, reload_w, row_h, "Reload", {
     font_size = btn_font,
-    on_click = function() self:on_reload() end,
+    on_click = function()
+      if self.on_reload then self.on_reload() end
+    end,
   })
   y = y + row_h + 15
 
@@ -440,12 +442,6 @@ function PANEL:on_attract_toggle(val)
   self.attract_enabled = val
   if self.on_attract_toggle then
     self.on_attract_toggle(val)
-  end
-end
-
-function PANEL:on_reload()
-  if self.on_reload then
-    self.on_reload()
   end
 end
 
