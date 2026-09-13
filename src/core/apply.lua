@@ -1,18 +1,20 @@
 local M = {}
 
-local function trim_rects_flip_y(rects)
+-- The canvas is y-down (LÖVE), same orientation as Hyprland's top-left
+-- position, so we only normalize to a (0,0) origin — no y-flip.
+local function trim_rects(rects)
   local min_x = math.huge
-  local max_y = -math.huge
+  local min_y = math.huge
   for _, r in ipairs(rects) do
     if r then
       min_x = math.min(min_x, r.x)
-      max_y = math.max(max_y, r.y + r.height)
+      min_y = math.min(min_y, r.y)
     end
   end
   for _, r in ipairs(rects) do
     if r then
       r.x = r.x - min_x
-      r.y = max_y - (r.y + r.height)
+      r.y = r.y - min_y
     end
   end
 end
@@ -28,7 +30,7 @@ function M.make_commands(gui_screens, canvas_scale)
       height = r.height * canvas_scale,
     })
   end
-  trim_rects_flip_y(rects)
+  trim_rects(rects)
 
   local cmds = {}
   for i, gs in ipairs(gui_screens) do
@@ -55,7 +57,7 @@ function M.make_commands(gui_screens, canvas_scale)
           screen.sdr_eotf or "default"
         )
       end
-      cmd = cmd .. "}"
+      cmd = cmd .. "})"
       table.insert(cmds, cmd)
     else
       local cmd = string.format("hl.monitor({output='%s', disabled=true})", screen.uid)
