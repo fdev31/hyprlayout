@@ -6,7 +6,7 @@ local GuiScreen = require("gui_screen")
 local Panel = require("panel")
 local apply = require("core.apply")
 
-local SCREEN_SCALE = 8
+local SCREEN_SCALE = 4
 local CONFIRM_DELAY = 20
 local gui_screens = {}
 local selected = nil

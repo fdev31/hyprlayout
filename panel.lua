@@ -176,7 +176,7 @@ function PANEL:layout(win_w, win_h)
   -- Screen Scale (canvas pixel ratio)
   self.ss_label = Label.new(x, y, "Canvas", { width = label_w, height = row_h })
   self.screen_scale = Slider.new(x + label_w, y, cw - label_w, row_h, {
-    min = 4, max = 16, step = 1, value = 8,
+    min = 2, max = 16, step = 1, value = 4,
     on_change = function(val) self:on_screen_scale_change(val) end,
   })
   y = y + row_h + 5
@@ -318,7 +318,7 @@ function PANEL:on_resolution_change()
   local screen = gs.screen
   local old_w, old_h = gs.target_rect.width, gs.target_rect.height
   screen.mode = { width = opt.value.w, height = opt.value.h, freq = screen.mode and screen.mode.freq or 60 }
-  local SCREEN_SCALE = 8
+  local SCREEN_SCALE = self.screen_scale.value
   local new_w = math.floor(opt.value.w / SCREEN_SCALE / screen.scale)
   local new_h = math.floor(opt.value.h / SCREEN_SCALE / screen.scale)
   if screen.transform % 2 == 1 then

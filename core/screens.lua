@@ -74,8 +74,8 @@ function M.load()
         break
       end
     end
-    if not cur_mode and #available > 0 then
-      cur_mode = available[1]
+    if not cur_mode then
+      cur_mode = Mode.new(monitor.width or 1920, monitor.height or 1080, monitor.refreshRate or 60)
     end
 
     local active = not monitor.disabled
