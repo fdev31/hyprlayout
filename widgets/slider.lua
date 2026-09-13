@@ -23,13 +23,21 @@ function Slider.new(x, y, w, h, opts)
   self.scale = opts.scale or 1.0
   self.font_size = math.floor(12 * self.scale)
   self._font = love.graphics.newFont(self.font_size)
+  self._value_w = math.floor(38 * self.scale)
   self._display = Anim.AnimFloat.new(self.value)
   return self
 end
 
-function Slider:_value_from_x(mx)
+function Slider:_track_geom()
   local r = self.rect
-  local ratio = (mx - r.x) / r.width
+  local track_x = r.x + self._value_w
+  local track_w = r.width - self._value_w
+  return track_x, track_w
+end
+
+function Slider:_value_from_x(mx)
+  local track_x, track_w = self:_track_geom()
+  local ratio = (mx - track_x) / track_w
   ratio = math.max(0, math.min(1, ratio))
   local raw = self.min + ratio * (self.max - self.min)
   local stepped = math.floor(raw / self.step + 0.5) * self.step
@@ -82,32 +90,34 @@ function Slider:draw()
     self._display:advance()
   end
 
+  local track_x, track_w = self:_track_geom()
   local track_h = math.max(2, math.floor(4 * self.scale))
   local track_y = r.y + r.height / 2 - track_h / 2
 
   love.graphics.setColor(TRACK_COLOR[1], TRACK_COLOR[2], TRACK_COLOR[3])
-  love.graphics.rectangle("fill", r.x, track_y, r.width, track_h, 2, 2)
+  love.graphics.rectangle("fill", track_x, track_y, track_w, track_h, 2, 2)
 
   local disp = self._display.value
   local ratio = (disp - self.min) / (self.max - self.min)
   ratio = math.max(0, math.min(1, ratio))
-  local fill_w = ratio * r.width
+  local fill_w = ratio * track_w
   love.graphics.setColor(FILL_COLOR[1], FILL_COLOR[2], FILL_COLOR[3])
   if fill_w > 0 then
-    love.graphics.rectangle("fill", r.x, track_y, fill_w, track_h, 2, 2)
+    love.graphics.rectangle("fill", track_x, track_y, fill_w, track_h, 2, 2)
   end
 
   local knob_r = math.floor(7 * self.scale)
-  local knob_x = r.x + fill_w
+  local knob_x = track_x + fill_w
   local knob_y = r.y + r.height / 2
   local kc = (self._hover or self._dragging) and KNOB_HOVER or KNOB_COLOR
   love.graphics.setColor(kc[1], kc[2], kc[3])
   love.graphics.circle("fill", knob_x, knob_y, knob_r)
 
+  -- Value label in the reserved left column (right-aligned, next to the track)
   love.graphics.setColor(TEXT_COLOR[1], TEXT_COLOR[2], TEXT_COLOR[3])
   local val_text = tostring(self.value)
   local tw = self._font:getWidth(val_text)
-  love.graphics.print(val_text, r.x + r.width - tw - 4, r.y + (r.height - self.font_size) / 2)
+  love.graphics.print(val_text, track_x - tw - 6, r.y + (r.height - self.font_size) / 2)
 end
 
 return Slider
