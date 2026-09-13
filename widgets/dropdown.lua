@@ -46,22 +46,33 @@ function Dropdown:set_options(options)
   end
 end
 
+function Dropdown:is_open()
+  return self._open
+end
+
+function Dropdown:hit_options(mx, my)
+  if not self._open then return nil end
+  local opt_h = self.rect.height
+  for i = 1, #self.options do
+    local oy = self.rect.y + i * opt_h
+    if mx >= self.rect.x and mx <= self.rect.x + self.rect.width
+      and my >= oy and my <= oy + opt_h then
+      return i
+    end
+  end
+  return nil
+end
+
 function Dropdown:on_press(mx, my)
   if self._open then
-    -- Check if clicking on an option
-    local opt_h = self.rect.height
-    for i = 1, #self.options do
-      local oy = self.rect.y + i * opt_h
-      if mx >= self.rect.x and mx <= self.rect.x + self.rect.width
-        and my >= oy and my <= oy + opt_h then
-        self.selected_index = i
-        self._open = false
-        self.on_change(self.selected_index, self)
-        return true
-      end
+    local idx = self:hit_options(mx, my)
+    if idx then
+      self.selected_index = idx
+      self._open = false
+      self.on_change(self.selected_index, self)
+    else
+      self._open = false
     end
-    -- Click outside options closes dropdown
-    self._open = false
     return true
   else
     if self:hit(mx, my) then

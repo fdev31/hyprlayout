@@ -616,18 +616,17 @@ end
 
 function PANEL:on_press(mx, my)
   if not self.visible then return false end
-  -- Check open dropdowns first (their options overlay everything)
+  -- Open dropdowns get absolute priority (options overlay everything)
   for _, w in ipairs(self.widgets) do
-    if w._open and w.on_press then
-      if w:on_press(mx, my) then
-        return true
-      end
+    if w.is_open and w:is_open() then
+      w:on_press(mx, my)
+      return true
     end
   end
   -- Check widgets in reverse order (last drawn = on top)
   for i = #self.widgets, 1, -1 do
     local w = self.widgets[i]
-    if not w._open and w.on_press and w:on_press(mx, my) then
+    if w.on_press and w:on_press(mx, my) then
       return true
     end
   end
@@ -646,6 +645,15 @@ end
 
 function PANEL:on_move(mx, my)
   if not self.visible then return false end
+  -- Open dropdowns get hover priority
+  local has_open = false
+  for _, w in ipairs(self.widgets) do
+    if w.is_open and w:is_open() then
+      has_open = true
+      if w.on_move then w:on_move(mx, my) end
+    end
+  end
+  if has_open then return false end
   for _, w in ipairs(self.widgets) do
     if w.on_move then
       w:on_move(mx, my)
