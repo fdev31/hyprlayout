@@ -228,7 +228,13 @@ local function start_screenshot_thread()
   if not next(gui_screens) then return end
   local info = {}
   for _, gs in ipairs(gui_screens) do
-    table.insert(info, { uid = gs.screen.uid, active = gs.screen.active })
+    local scr = gs.screen
+    local tw, th
+    if scr.mode then
+      -- Decode at the size the preview is actually displayed at (the UI canvas scale)
+      tw, th = Rect.screen_size(scr.mode.width, scr.mode.height, scr.scale, SCREEN_SCALE, scr.transform)
+    end
+    table.insert(info, { uid = scr.uid, active = scr.active, tw = tw, th = th })
   end
   shot_thread = love.thread.newThread("core/screenshot_thread.lua")
   shot_thread:start(info, shot_dir)
