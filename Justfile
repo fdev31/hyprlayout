@@ -23,7 +23,7 @@
 
 # Run the app from the source tree.
 default:
-    love .
+    love src
 
 # Build both dist/ artifacts: the .love archive and the self-contained exe.
 build:
@@ -32,7 +32,7 @@ build:
     cmake -S .love-build/src -B .love-build/build -DCMAKE_BUILD_TYPE=Release -DLOVE_MPG123=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5
     cmake --build .love-build/build -j"$(nproc)"
     rm -rf dist && mkdir -p dist
-    zip -r -q dist/hyprlayout.love conf.lua main.lua panel.lua gui_screen.lua dkjson.lua core widgets
+    cd src && zip -r -q ../dist/hyprlayout.love conf.lua main.lua panel.lua gui_screen.lua dkjson.lua core widgets
     cat .love-build/build/love dist/hyprlayout.love > dist/hyprlayout
     chmod +x dist/hyprlayout
     @echo "Built dist/hyprlayout ($(du -h dist/hyprlayout | cut -f1)) and dist/hyprlayout.love ($(du -h dist/hyprlayout.love | cut -f1))"
@@ -40,7 +40,7 @@ build:
 # Build only the .love archive (fast; no LÖVE build required).
 love:
     mkdir -p dist
-    zip -r -q dist/hyprlayout.love conf.lua main.lua panel.lua gui_screen.lua dkjson.lua core widgets
+    cd src && zip -r -q ../dist/hyprlayout.love conf.lua main.lua panel.lua gui_screen.lua dkjson.lua core widgets
     @echo "Built dist/hyprlayout.love ($(du -h dist/hyprlayout.love | cut -f1))"
 
 # Build, then run the self-contained executable.
