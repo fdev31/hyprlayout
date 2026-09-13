@@ -126,7 +126,7 @@ function Dropdown:draw()
   love.graphics.setColor(TEXT_COLOR[1], TEXT_COLOR[2], TEXT_COLOR[3])
   local text = self:get_selected_name()
   local tx = r.x + 8
-  local ty = r.y + (r.height - self.font_size) / 2
+  local ty = r.y + (r.height - self._font:getHeight()) / 2
   love.graphics.print(text, tx, ty)
 
   -- Arrow
@@ -170,7 +170,7 @@ function Dropdown:draw_overlay()
     love.graphics.rectangle("line", r.x, oy, r.width, opt_h)
 
     love.graphics.setColor(TEXT_COLOR[1], TEXT_COLOR[2], TEXT_COLOR[3])
-    love.graphics.print(name, r.x + 8, oy + (opt_h - self.font_size) / 2)
+    love.graphics.print(name, r.x + 8, oy + (opt_h - self._font:getHeight()) / 2)
   end
 
   love.graphics.setScissor()

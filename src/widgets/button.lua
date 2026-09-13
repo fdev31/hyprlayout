@@ -65,9 +65,10 @@ function Button:draw()
   love.graphics.rectangle("fill", self.rect.x, self.rect.y, self.rect.width, self.rect.height)
   love.graphics.setColor(1, 1, 1)
   love.graphics.setFont(self._font)
-  local tw = love.graphics.getFont():getWidth(self.text)
+  local font = self._font
+  local tw = font:getWidth(self.text)
   local tx = self.rect.x + (self.rect.width - tw) / 2
-  local ty = self.rect.y + (self.rect.height - self.font_size) / 2
+  local ty = self.rect.y + (self.rect.height - font:getHeight()) / 2
   love.graphics.print(self.text, tx, ty)
 end
 

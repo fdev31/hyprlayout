@@ -117,7 +117,7 @@ function Slider:draw()
   love.graphics.setColor(TEXT_COLOR[1], TEXT_COLOR[2], TEXT_COLOR[3])
   local val_text = tostring(self.value)
   local tw = self._font:getWidth(val_text)
-  love.graphics.print(val_text, track_x - tw - 6, r.y + (r.height - self.font_size) / 2)
+  love.graphics.print(val_text, track_x - tw - 6, r.y + (r.height - self._font:getHeight()) / 2)
 end
 
 return Slider
