@@ -70,7 +70,6 @@ end
 local function on_release_snap()
   snap.snap_active_screen(gui_screens)
   snap.attract_screens(gui_screens)
-  center_layout()
   anchor_data = anchors.detect(gui_screens)
 end
 
