@@ -1,0 +1,87 @@
+# hyprlayout
+
+A LÖVE 11.5 GUI for arranging and configuring Hyprland monitor layouts. Drag
+screens into position, tune resolution / scale / rotation / HDR per output,
+then apply the layout with `hyprctl`. Layouts can be saved and recalled as
+named profiles.
+
+Ported from `wlr-layout-ui` (see `PORTING_NOTES.md`).
+
+## Requirements
+
+- Linux (developed and tested on Arch)
+- [Hyprland](https://hyprland.org/) running — the app drives `hyprctl`
+- [LÖVE 11.5](https://love2d.org/) — only needed to run from source or the
+  `.love` archive. The self-contained executable (below) needs no LÖVE install.
+
+## Running from source
+
+```sh
+just            # == love src
+```
+
+## Command line
+
+```
+hyprlayout [option] [profile]
+
+  -l            list saved profiles
+  -m            apply the first profile (alphabetical) whose monitor set
+                matches the currently active displays
+  <profile>     load (apply) the named profile
+  (no args)     open the GUI
+```
+
+With any option the app does its job and exits — no GUI is opened.
+
+## GUI controls
+
+| Input    | Action                        |
+| -------- | ----------------------------- |
+| drag     | move a screen                 |
+| wheel    | zoom canvas / scroll the panel|
+| Enter    | apply the layout              |
+| R        | reload screens                |
+| Tab      | cycle to the next profile     |
+| F1 / ?   | toggle this help              |
+| Esc      | close help / quit             |
+
+## Building
+
+`just build` produces two artifacts in `dist/`:
+
+- `dist/hyprlayout` — a single self-contained executable. The first build
+  clones and statically compiles LÖVE 11.5 (cached in `.love-build/`), then
+  fuses the game archive into the `love` binary. It runs without LÖVE
+  installed, though it links common desktop libraries (SDL2, freetype,
+  openal, ogg/vorbis/theora/mpg123).
+- `dist/hyprlayout.love` — a standard LÖVE game archive; run with
+  `love dist/hyprlayout.love`.
+
+Other recipes:
+
+```
+just love       # build only the .love archive (fast)
+just run        # build, then run the self-contained exe
+just clean      # remove dist/
+just distclean  # remove dist/ and the cached LÖVE build tree
+```
+
+## Profiles & settings
+
+Stored under `~/.config/hyprlayout/`:
+
+- `settings.lua` — last-used UI settings (canvas scale, window size, …)
+- `profiles/` — one file per saved layout
+
+## Project layout
+
+```
+src/
+  main.lua        entry point, canvas, input, help overlay, CLI handling
+  panel.lua       the right-hand control panel
+  gui_screen.lua  a draggable screen widget
+  conf.lua        LÖVE configuration
+  core/           screens, apply (hyprctl), profiles, settings, rect, snap, anchors
+  widgets/        reusable UI widgets (button, slider, dropdown, toggle, …)
+```
