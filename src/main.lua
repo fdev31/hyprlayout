@@ -123,33 +123,6 @@ local function set_current_modes_as_ref()
   original_cmd = apply.make_commands(gui_screens, SCREEN_SCALE)
 end
 
-local function reload_all()
-  load_screens()
-  center_layout(true)
-  panel:set_screen(nil)
-  set_current_modes_as_ref()
-end
-
-local function revert_layout(msg)
-  if original_cmd and #original_cmd > 0 then
-    apply.run_commands(original_cmd)
-  end
-  confirm_start = 0
-  reload_all()
-  status_msg = msg
-  status_timer = 3
-end
-
-local function action_apply()
-  local cmds = apply.make_commands(gui_screens, SCREEN_SCALE)
-  if #cmds > 0 then
-    apply.run_commands(cmds)
-    confirm_start = os.clock()
-    status_msg = "Layout applied! Press ENTER to confirm or ESC to revert (" .. CONFIRM_DELAY .. "s)"
-    status_timer = CONFIRM_DELAY
-  end
-end
-
 local function load_screens()
   gui_screens = {}
   shot_images = {}
@@ -187,6 +160,33 @@ local function load_screens()
 
   center_layout(true)
   anchor_data = anchors.detect(gui_screens)
+end
+
+local function reload_all()
+  load_screens()
+  center_layout(true)
+  panel:set_screen(nil)
+  set_current_modes_as_ref()
+end
+
+local function revert_layout(msg)
+  if original_cmd and #original_cmd > 0 then
+    apply.run_commands(original_cmd)
+  end
+  confirm_start = 0
+  reload_all()
+  status_msg = msg
+  status_timer = 3
+end
+
+local function action_apply()
+  local cmds = apply.make_commands(gui_screens, SCREEN_SCALE)
+  if #cmds > 0 then
+    apply.run_commands(cmds)
+    confirm_start = os.clock()
+    status_msg = "Layout applied! Press ENTER to confirm or ESC to revert (" .. CONFIRM_DELAY .. "s)"
+    status_timer = CONFIRM_DELAY
+  end
 end
 
 local function layout_panel()
