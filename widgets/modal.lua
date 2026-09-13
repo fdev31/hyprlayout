@@ -59,7 +59,7 @@ function Modal:on_text(chr)
     if self.on_cancel then self.on_cancel() end
     return
   end
-  if utf8.len(chr) then
+  if chr:match("[%z\1-\31]") == nil then
     self.text = self.text .. chr
   end
 end
@@ -68,6 +68,11 @@ function Modal:keypressed(key)
   if not self.focused then return end
   if key == "backspace" then
     self.text = self.text:sub(1, -2)
+  elseif key == "return" or key == "enter" then
+    if self.text ~= "" and self.on_submit then
+      self.on_submit(self.text)
+    end
+    self:hide()
   elseif key == "escape" then
     self:hide()
     if self.on_cancel then self.on_cancel() end

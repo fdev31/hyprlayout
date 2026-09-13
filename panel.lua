@@ -465,8 +465,31 @@ function PANEL:on_save_profile()
   local gs_list = self.get_all_screens and self.get_all_screens()
   if not gs_list then return end
 
+  local name = self.profiles_dd:get_selected_name()
+  if name == "" or name == "(no profiles)" then
+    if not self._modal then
+      local win_w = love.graphics.getWidth()
+      local win_h = love.graphics.getHeight()
+      self._modal = Modal.new(win_w, win_h, "Save Profile", "Profile name",
+        function(text)
+          self:_do_save_profile(text)
+        end,
+        function()
+        end
+      )
+    end
+    self._modal:show()
+    return
+  end
+  self:_do_save_profile(name)
+end
+
+function PANEL:_do_save_profile(name)
+  local gs_list = self.get_all_screens and self.get_all_screens()
+  if not gs_list then return end
+
   local data = {
-    name = self.profiles_dd:get_selected_name(),
+    name = name,
     screens = {},
   }
   for _, gs in ipairs(gs_list) do
@@ -482,16 +505,12 @@ function PANEL:on_save_profile()
       scale = screen.scale,
       transform = screen.transform,
       position = {
-        x = math.floor(gs.target_rect.x * 8),
-        y = math.floor(gs.target_rect.y * 8),
+        x = math.floor(gs.target_rect.x * self.screen_scale.value),
+        y = math.floor(gs.target_rect.y * self.screen_scale.value),
       },
     })
   end
 
-  local name = data.name
-  if name == "" or name == "(no profiles)" then
-    name = "profile_" .. os.date("%Y%m%d_%H%M%S")
-  end
   local ok, err = profiles.save_profile(name, data)
   if ok then
     self.status:set_text("Saved: " .. name)
