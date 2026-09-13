@@ -70,6 +70,7 @@ end
 local function on_release_snap()
   snap.snap_active_screen(gui_screens)
   snap.attract_screens(gui_screens)
+  center_layout()
   anchor_data = anchors.detect(gui_screens)
 end
 
@@ -294,7 +295,7 @@ function love.mousepressed(x, y, button)
       drag_moved = false
       drag_offset[1] = x - gs.rect.x
       drag_offset[2] = y - gs.rect.y
-      gui_screens[i] = table.remove(gui_screens, i)
+      table.remove(gui_screens, i)
       table.insert(gui_screens, gs)
       panel:set_screen(gs)
       return
