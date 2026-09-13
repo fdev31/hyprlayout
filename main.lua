@@ -8,6 +8,7 @@ local apply = require("core.apply")
 
 local SCREEN_SCALE = 4
 local CONFIRM_DELAY = 20
+local SCREENSHOT_INTERVAL = 10
 local gui_screens = {}
 local selected = nil
 local dragging = false
@@ -20,6 +21,10 @@ local panel_w = 280
 local confirm_start = 0
 local original_cmd = nil
 local anchor_data = {}
+local shot_thread = nil
+local shot_channel = nil
+local shot_timer = 0
+local shot_images = {}
 
 local function get_screen_size(screen)
   if not screen.mode then
@@ -103,6 +108,7 @@ end
 
 local function load_screens()
   gui_screens = {}
+  shot_images = {}
   local ok = screens.load()
 
   if not ok or #screens.displayInfo == 0 then
@@ -187,11 +193,64 @@ local function layout_panel()
   end
 end
 
+local shot_dir = nil
+
+local function start_screenshot_thread()
+  if not next(gui_screens) then return end
+  local info = {}
+  for _, gs in ipairs(gui_screens) do
+    table.insert(info, { uid = gs.screen.uid, active = gs.screen.active })
+  end
+  shot_thread = love.thread.newThread("core/screenshot_thread.lua")
+  shot_thread:start(info, shot_dir)
+end
+
+local function poll_screenshots()
+  if shot_thread then
+    local ok, err = pcall(function() return shot_thread:getError() end)
+    if ok and err then
+      print("[screenshot thread error] " .. err)
+    end
+  end
+  if not shot_channel then return end
+  while true do
+    local msg = shot_channel:pop()
+    if not msg then break end
+    if msg.type == "screenshot" then
+      local rel_path = "shots/" .. msg.file
+      local ok, img = pcall(love.graphics.newImage, rel_path)
+      if ok and img then
+        shot_images[msg.uid] = img
+        for _, gs in ipairs(gui_screens) do
+          if gs.screen.uid == msg.uid then
+            gs:set_preview(img)
+          end
+        end
+      end
+    end
+  end
+end
+
+function love.threaderror(msg)
+  print("[THREAD ERROR] " .. tostring(msg))
+end
+
 function love.load()
   math.randomseed(os.time())
+  shot_channel = love.thread.getChannel("screenshots")
+  local cwd = love.filesystem.getWorkingDirectory()
+  shot_dir = cwd .. "/shots"
   load_screens()
   layout_panel()
   set_current_modes_as_ref()
+  start_screenshot_thread()
+  shot_timer = SCREENSHOT_INTERVAL
+end
+
+function love.quit()
+  if shot_thread then
+    shot_thread:wait()
+  end
 end
 
 function love.resize(w, h)
@@ -202,6 +261,12 @@ end
 function love.update(dt)
   for _, gs in ipairs(gui_screens) do
     gs:update(dt)
+  end
+  poll_screenshots()
+  shot_timer = shot_timer - dt
+  if shot_timer <= 0 then
+    shot_timer = SCREENSHOT_INTERVAL
+    start_screenshot_thread()
   end
   if status_timer > 0 then
     status_timer = status_timer - dt

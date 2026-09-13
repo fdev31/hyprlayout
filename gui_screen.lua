@@ -26,7 +26,12 @@ function GuiScreen.new(screen, rect)
   self.dragging = false
   self.highlighted = false
   self.cur_border = 2.0
+  self.preview = nil
   return self
+end
+
+function GuiScreen:set_preview(img)
+  self.preview = img
 end
 
 function GuiScreen:genColor()
@@ -100,6 +105,14 @@ function GuiScreen:draw()
 
   love.graphics.setColor(color[1] / 255, color[2] / 255, color[3] / 255)
   love.graphics.rectangle("fill", r.x, r.y, r.width, r.height)
+
+  if self.preview and self.screen.active then
+    local sx = r.width / self.preview:getWidth()
+    local sy = r.height / self.preview:getHeight()
+    love.graphics.draw(self.preview, r.x, r.y, 0, sx, sy)
+    love.graphics.setColor(0, 0, 0, 0.4)
+    love.graphics.rectangle("fill", r.x, r.y, r.width, r.height)
+  end
 
   love.graphics.setColor(border_color[1] / 255, border_color[2] / 255, border_color[3] / 255)
   love.graphics.setLineWidth(self.cur_border)
