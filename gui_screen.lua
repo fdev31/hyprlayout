@@ -148,14 +148,24 @@ function GuiScreen:draw()
   love.graphics.setFont(self._font)
   local tx, ty = r.x + r.width / 2, r.y + r.height / 2
   love.graphics.setColor(0.94, 0.94, 0.94)
-  love.graphics.printf(self.screen.name, r.x, ty - math.floor(10 * s), r.width, "center")
+
+  love.graphics.setScissor(r.x, r.y, r.width, r.height)
+
+  local function draw_centered(text, y)
+    local tw = self._font:getWidth(text)
+    love.graphics.print(text, tx - tw / 2, y)
+  end
+
+  draw_centered(self.screen.name, ty - math.floor(10 * s))
 
   if self.screen.active and self.screen.mode then
     local label = string.format("%dx%d@%d",
       self.screen.mode.width, self.screen.mode.height, math.floor(self.screen.mode.freq))
-    love.graphics.printf(label, r.x, ty - math.floor(25 * s), r.width, "center")
-    love.graphics.printf(self.screen.uid, r.x, ty + math.floor(5 * s), r.width, "center")
+    draw_centered(label, ty - math.floor(25 * s))
+    draw_centered(self.screen.uid, ty + math.floor(5 * s))
   end
+
+  love.graphics.setScissor()
 end
 
 return GuiScreen

@@ -5,6 +5,7 @@ local anchors = require("core.anchors")
 local GuiScreen = require("gui_screen")
 local Panel = require("panel")
 local apply = require("core.apply")
+local settings = require("core.settings")
 
 local SCREEN_SCALE = 4
 local CONFIRM_DELAY = 20
@@ -72,6 +73,14 @@ local function center_layout(immediate)
   end
 end
 
+local function save_settings()
+  settings.save({
+    canvas_scale = SCREEN_SCALE,
+    ui_scale = panel.ui_scale_factor,
+    attract_enabled = panel.attract_enabled,
+  })
+end
+
 local function change_canvas_scale(val)
   if type(val) ~= "number" then return end
   val = math.max(2, math.min(16, math.floor(val)))
@@ -89,6 +98,7 @@ local function change_canvas_scale(val)
   center_layout(true)
   anchor_data = anchors.detect(gui_screens)
   panel.screen_scale.value = val
+  save_settings()
 end
 
 local function on_release_snap()
@@ -183,6 +193,7 @@ local function layout_panel()
       gs.ui_scale = val
     end
     layout_panel()
+    save_settings()
   end
   panel.on_visibility_changed = function()
     layout_panel()
@@ -194,6 +205,7 @@ local function layout_panel()
   end
   panel.on_attract_toggle = function(val)
     panel.attract_enabled = val
+    save_settings()
   end
   panel:update_profiles()
   if selected then
@@ -248,14 +260,32 @@ function love.load()
   shot_channel = love.thread.getChannel("screenshots")
   local cwd = love.filesystem.getWorkingDirectory()
   shot_dir = cwd .. "/shots"
+
+  local saved = settings.load()
+  if saved.canvas_scale then
+    SCREEN_SCALE = math.max(2, math.min(16, saved.canvas_scale))
+  end
+  if saved.ui_scale then
+    panel.ui_scale_factor = saved.ui_scale
+    panel_w = math.floor(280 * saved.ui_scale)
+  end
+  if saved.attract_enabled ~= nil then
+    panel.attract_enabled = saved.attract_enabled
+  end
+
   load_screens()
   layout_panel()
+  panel.screen_scale.value = SCREEN_SCALE
+  for _, gs in ipairs(gui_screens) do
+    gs.ui_scale = panel.ui_scale_factor or 1.0
+  end
   set_current_modes_as_ref()
   start_screenshot_thread()
   shot_timer = SCREENSHOT_INTERVAL
 end
 
 function love.quit()
+  save_settings()
   if shot_thread then
     shot_thread:wait()
   end
