@@ -94,6 +94,7 @@ function PANEL.new()
   self.visible = true
   self.selected_gs = nil
   self.screen_settings_visible = false
+  self.attract_enabled = true
   return self
 end
 
@@ -137,6 +138,22 @@ function PANEL:layout(win_w, win_h)
     min = 0.5, max = 2.0, step = 0.25, value = self.ui_scale_factor or 1.0, scale = ui_scale,
     on_change = function(val) self.on_ui_scale_change(val) end,
   })
+  y = y + row_h + 5
+
+  -- Attraction
+  self.attract_label = Label.new(x, y, "Attraction", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+  self.attract = Toggle.new(x + label_w, y, math.floor(50 * ui_scale), math.floor(20 * ui_scale), {
+    value = self.attract_enabled ~= false,
+    on_toggle = function(val) self.on_attract_toggle(val) end,
+  })
+  y = y + row_h + 5
+
+  -- Reload
+  local reload_w = math.floor((cw - margin) / 2)
+  self.btn_reload = Button.new(x, y, reload_w, row_h, "Reload", {
+    font_size = btn_font,
+    on_click = function() self:on_reload() end,
+  })
   y = y + row_h + 15
 
   -- Profiles section
@@ -164,7 +181,8 @@ function PANEL:layout(win_w, win_h)
 
   -- General widgets
   local general_widgets = {
-    self.screen_scale, self.ui_scale, self.profiles_dd,
+    self.screen_scale, self.ui_scale, self.attract, self.btn_reload,
+    self.profiles_dd,
     self.btn_save, self.btn_load, self.btn_new, self.btn_delete,
   }
 
@@ -418,6 +436,19 @@ function PANEL:on_power_toggle(val)
   gs.screen.active = val
 end
 
+function PANEL:on_attract_toggle(val)
+  self.attract_enabled = val
+  if self.on_attract_toggle then
+    self.on_attract_toggle(val)
+  end
+end
+
+function PANEL:on_reload()
+  if self.on_reload then
+    self.on_reload()
+  end
+end
+
 function PANEL:on_screen_scale_change(val)
   if self.on_screen_scale_change then
     self.on_screen_scale_change(val)
@@ -598,6 +629,7 @@ function PANEL:draw()
   self.title:draw()
   self.ss_label:draw()
   self.ui_label:draw()
+  self.attract_label:draw()
   self.profile_label:draw()
 
   -- Screen settings labels (conditional)

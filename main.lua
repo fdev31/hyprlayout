@@ -69,7 +69,9 @@ end
 
 local function on_release_snap()
   snap.snap_active_screen(gui_screens)
-  snap.attract_screens(gui_screens)
+  if panel.attract_enabled then
+    snap.attract_screens(gui_screens)
+  end
   center_layout()
   anchor_data = anchors.detect(gui_screens)
 end
@@ -170,6 +172,14 @@ local function layout_panel()
   end
   panel.on_visibility_changed = function()
     layout_panel()
+  end
+  panel.on_reload = function()
+    load_screens()
+    layout_panel()
+    set_current_modes_as_ref()
+  end
+  panel.on_attract_toggle = function(val)
+    panel.attract_enabled = val
   end
   panel:update_profiles()
   if selected then
