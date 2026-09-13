@@ -949,7 +949,9 @@ function PANEL:on_press(mx, my)
       return true
     end
   end
-  return false
+  -- Consume clicks on empty panel space so they don't fall through to the
+  -- canvas, which would deselect the current screen.
+  return mx >= self.x and mx <= self.x + self.w and my >= self.y and my <= self.y + self.h
 end
 
 function PANEL:on_release(mx, my)
