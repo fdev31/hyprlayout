@@ -726,7 +726,7 @@ function love.wheelmoved(_, dy)
   end
   local x = love.mouse.getX()
   if x < canvas_w() then
-    change_canvas_scale(SCREEN_SCALE + dy)
+    change_canvas_scale(SCREEN_SCALE - dy)
   end
 end
 
