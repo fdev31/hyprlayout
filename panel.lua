@@ -95,14 +95,20 @@ function PANEL.new()
 end
 
 function PANEL:layout(win_w, win_h)
-  self.x = win_w - PANEL_W - MARGIN
-  self.y = MARGIN
-  self.w = PANEL_W
-  self.h = win_h - 2 * MARGIN
+  local ui_scale = self.ui_scale_factor or 1.0
+  local pw = math.floor(PANEL_W * ui_scale)
+  local row_h = math.floor(ROW_H * ui_scale)
+  local margin = math.floor(MARGIN * ui_scale)
+  local label_w = math.floor(LABEL_W * ui_scale)
 
-  local x = self.x + MARGIN
-  local y = self.y + MARGIN
-  local cw = self.w - 2 * MARGIN
+  self.x = win_w - pw - margin
+  self.y = margin
+  self.w = pw
+  self.h = win_h - 2 * margin
+
+  local x = self.x + margin
+  local y = self.y + margin
+  local cw = self.w - 2 * margin
 
   -- Title
   self.title = Label.new(x, y, "Screen Settings", { width = cw, height = 20, font_size = 15, align = "center" })
@@ -110,27 +116,27 @@ function PANEL:layout(win_w, win_h)
 
   -- Screen name
   self.screen_name = Label.new(x, y, "", { width = cw, height = 20, font_size = 13 })
-  y = y + ROW_H + 5
+  y = y + row_h + 5
 
   -- Resolution
-  self.res_label = Label.new(x, y, "Resolution", { width = LABEL_W, height = ROW_H })
-  self.resolutions = Dropdown.new(x + LABEL_W, y, cw - LABEL_W, ROW_H, {
+  self.res_label = Label.new(x, y, "Resolution", { width = label_w, height = row_h })
+  self.resolutions = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
     options = {},
     on_change = function() self:on_resolution_change() end,
   })
-  y = y + ROW_H + 5
+  y = y + row_h + 5
 
   -- Frequency
-  self.freq_label = Label.new(x, y, "Refresh", { width = LABEL_W, height = ROW_H })
-  self.frequencies = Dropdown.new(x + LABEL_W, y, cw - LABEL_W, ROW_H, {
+  self.freq_label = Label.new(x, y, "Refresh", { width = label_w, height = row_h })
+  self.frequencies = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
     options = {},
     on_change = function() end,
   })
-  y = y + ROW_H + 5
+  y = y + row_h + 5
 
   -- Scale
-  self.scale_label = Label.new(x, y, "Scale", { width = LABEL_W, height = ROW_H })
-  self.scale = Dropdown.new(x + LABEL_W, y, cw - LABEL_W, ROW_H, {
+  self.scale_label = Label.new(x, y, "Scale", { width = label_w, height = row_h })
+  self.scale = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
     options = {
       { name = "0.5", value = 0.5 },
       { name = "0.75", value = 0.75 },
@@ -141,11 +147,11 @@ function PANEL:layout(win_w, win_h)
     },
     on_change = function() self:on_scale_change() end,
   })
-  y = y + ROW_H + 5
+  y = y + row_h + 5
 
   -- Rotation
-  self.rot_label = Label.new(x, y, "Rotation", { width = LABEL_W, height = ROW_H })
-  self.rotation = Dropdown.new(x + LABEL_W, y, cw - LABEL_W, ROW_H, {
+  self.rot_label = Label.new(x, y, "Rotation", { width = label_w, height = row_h })
+  self.rotation = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
     options = {
       { name = "0 (normal)", value = 0 },
       { name = "1 (90 CW)", value = 1 },
@@ -156,15 +162,43 @@ function PANEL:layout(win_w, win_h)
     },
     on_change = function() self:on_rotation_change() end,
   })
-  y = y + ROW_H + 10
+  y = y + row_h + 10
 
   -- Power
-  self.power_label = Label.new(x, y, "Enabled", { width = LABEL_W, height = ROW_H })
-  self.power = Toggle.new(x + LABEL_W, y, 50, 20, {
+  self.power_label = Label.new(x, y, "Enabled", { width = label_w, height = row_h })
+  self.power = Toggle.new(x + label_w, y, 50, 20, {
     value = true,
     on_toggle = function(val) self:on_power_toggle(val) end,
   })
-  y = y + ROW_H + 15
+  y = y + row_h + 5
+
+  -- Screen Scale (canvas pixel ratio)
+  self.ss_label = Label.new(x, y, "Canvas", { width = label_w, height = row_h })
+  self.screen_scale = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
+    options = {
+      { name = "4 (zoomed)", value = 4 },
+      { name = "6", value = 6 },
+      { name = "8 (default)", value = 8 },
+      { name = "10", value = 10 },
+      { name = "12", value = 12 },
+      { name = "16 (small)", value = 16 },
+    },
+    on_change = function() self:on_screen_scale_change() end,
+  })
+  y = y + row_h + 5
+
+  -- UI Scale
+  self.ui_label = Label.new(x, y, "UI Scale", { width = label_w, height = row_h })
+  self.ui_scale = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
+    options = {
+      { name = "0.75 (compact)", value = 0.75 },
+      { name = "1.0 (default)", value = 1.0 },
+      { name = "1.25", value = 1.25 },
+      { name = "1.5 (large)", value = 1.5 },
+    },
+    on_change = function() self:on_ui_scale_change() end,
+  })
+  y = y + row_h + 15
 
   -- Separator
   y = y + 5
@@ -172,23 +206,22 @@ function PANEL:layout(win_w, win_h)
   self.profile_label = Label.new(x, y, "Profiles", { width = cw, height = 20, font_size = 14 })
   y = y + 25
 
-  local btn_w = math.floor((cw - 5 * MARGIN) / 6)
-  self.profiles_dd = Dropdown.new(x, y, cw, ROW_H, {
+  self.profiles_dd = Dropdown.new(x, y, cw, row_h, {
     options = {},
     on_change = function() self:on_profile_select() end,
   })
-  y = y + ROW_H + 5
+  y = y + row_h + 5
 
-  local bw = math.floor((cw - 3 * MARGIN) / 4)
-  self.btn_save = Button.new(x, y, bw, ROW_H, "Save", { on_click = function() self:on_save_profile() end })
-  self.btn_load = Button.new(x + bw + MARGIN, y, bw, ROW_H, "Load", { on_click = function() self:on_load_profile() end })
-  self.btn_new = Button.new(x + 2 * (bw + MARGIN), y, bw, ROW_H, "New", { on_click = function() self:on_new_profile() end })
-  self.btn_delete = Button.new(x + 3 * (bw + MARGIN), y, bw, ROW_H, "Del", {
+  local bw = math.floor((cw - 3 * margin) / 4)
+  self.btn_save = Button.new(x, y, bw, row_h, "Save", { on_click = function() self:on_save_profile() end })
+  self.btn_load = Button.new(x + bw + margin, y, bw, row_h, "Load", { on_click = function() self:on_load_profile() end })
+  self.btn_new = Button.new(x + 2 * (bw + margin), y, bw, row_h, "New", { on_click = function() self:on_new_profile() end })
+  self.btn_delete = Button.new(x + 3 * (bw + margin), y, bw, row_h, "Del", {
     color = { 0.5, 0.2, 0.2 },
     hover_color = { 0.6, 0.25, 0.25 },
     on_click = function() self:on_delete_profile() end,
   })
-  y = y + ROW_H + 15
+  y = y + row_h + 15
 
   -- Apply section
   local apply_w = math.floor((cw - MARGIN) / 2)
@@ -208,7 +241,8 @@ function PANEL:layout(win_w, win_h)
   -- Store all widgets for event dispatch
   self.widgets = {
     self.resolutions, self.frequencies, self.scale, self.rotation,
-    self.power, self.profiles_dd,
+    self.power, self.screen_scale, self.ui_scale,
+    self.profiles_dd,
     self.btn_save, self.btn_load, self.btn_new, self.btn_delete,
     self.btn_apply, self.btn_center,
   }
@@ -359,6 +393,22 @@ function PANEL:on_power_toggle(val)
   local gs = self.selected_gs
   if not gs then return end
   gs.screen.active = val
+end
+
+function PANEL:on_screen_scale_change()
+  local opt = self.screen_scale:get_selected()
+  if not opt then return end
+  if self.on_screen_scale_change then
+    self.on_screen_scale_change(opt.value)
+  end
+end
+
+function PANEL:on_ui_scale_change()
+  local opt = self.ui_scale:get_selected()
+  if not opt then return end
+  if self.on_ui_scale_change then
+    self.on_ui_scale_change(opt.value)
+  end
 end
 
 function PANEL:on_profile_select()

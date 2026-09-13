@@ -137,6 +137,23 @@ local function load_screens()
   anchor_data = anchors.detect(gui_screens)
 end
 
+local function recalculate_all_screens()
+  for _, gs in ipairs(gui_screens) do
+    local screen = gs.screen
+    if screen.mode then
+      local w = math.floor(screen.mode.width / SCREEN_SCALE / screen.scale)
+      local h = math.floor(screen.mode.height / SCREEN_SCALE / screen.scale)
+      if screen.transform % 2 == 1 then
+        w, h = h, w
+      end
+      gs.target_rect.width = w
+      gs.target_rect.height = h
+    end
+  end
+  center_layout(true)
+  anchor_data = anchors.detect(gui_screens)
+end
+
 local function layout_panel()
   local win_w = love.graphics.getWidth()
   local win_h = love.graphics.getHeight()
@@ -146,6 +163,15 @@ local function layout_panel()
   panel.on_screen_resized = on_screen_resized
   panel.on_center = function() center_layout(true) end
   panel.on_apply_callback = function() action_apply() end
+  panel.on_screen_scale_change = function(val)
+    SCREEN_SCALE = val
+    recalculate_all_screens()
+  end
+  panel.on_ui_scale_change = function(val)
+    panel.ui_scale_factor = val
+    panel_w = math.floor(280 * val)
+    layout_panel()
+  end
   panel:update_profiles()
   if selected then
     panel:set_screen(selected)
