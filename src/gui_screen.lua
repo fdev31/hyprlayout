@@ -141,9 +141,14 @@ function GuiScreen:draw()
 
   local s = self.ui_scale
   local fs = math.floor(14 * s)
+  local fs_port = math.floor(16 * s)
   if not self._font or self._font_size ~= fs then
     self._font_size = fs
     self._font = love.graphics.newFont(fs)
+  end
+  if not self._font_port or self._font_port_size ~= fs_port then
+    self._font_port_size = fs_port
+    self._font_port = love.graphics.newFont(fs_port, true)
   end
   love.graphics.setFont(self._font)
   local tx, ty = r.x + r.width / 2, r.y + r.height / 2
@@ -151,8 +156,10 @@ function GuiScreen:draw()
 
   love.graphics.setScissor(r.x, r.y, r.width, r.height)
 
-  local function draw_centered(text, y)
-    local tw = self._font:getWidth(text)
+  local function draw_centered(text, y, font)
+    font = font or self._font
+    love.graphics.setFont(font)
+    local tw = font:getWidth(text)
     love.graphics.print(text, tx - tw / 2, y)
   end
 
@@ -162,7 +169,7 @@ function GuiScreen:draw()
     local label = string.format("%dx%d@%d",
       self.screen.mode.width, self.screen.mode.height, math.floor(self.screen.mode.freq))
     draw_centered(label, ty - math.floor(25 * s))
-    draw_centered(self.screen.uid, ty + math.floor(5 * s))
+    draw_centered(self.screen.uid, ty + math.floor(5 * s), self._font_port)
   end
 
   love.graphics.setScissor()
