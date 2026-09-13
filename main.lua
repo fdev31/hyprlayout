@@ -162,10 +162,10 @@ local function layout_panel()
     local ratio = old_scale / val
     for _, gs in ipairs(gui_screens) do
       local r = gs.target_rect
-      r.x = math.floor(r.x * ratio)
-      r.y = math.floor(r.y * ratio)
-      r.width = math.floor(r.width * ratio)
-      r.height = math.floor(r.height * ratio)
+      r.x = r.x * ratio
+      r.y = r.y * ratio
+      r.width = r.width * ratio
+      r.height = r.height * ratio
     end
     center_layout(true)
     anchor_data = anchors.detect(gui_screens)
@@ -352,6 +352,12 @@ function love.mousemoved(x, y)
   end
 end
 
+local function set_highlight(gs)
+  for _, s in ipairs(gui_screens) do
+    s.highlighted = (s == gs)
+  end
+end
+
 function love.mousepressed(x, y, button)
   if button ~= 1 then return end
 
@@ -364,6 +370,7 @@ function love.mousepressed(x, y, button)
     local gs = gui_screens[i]
     if gs.rect:contains(x, y) then
       selected = gs
+      set_highlight(gs)
       dragging = true
       drag_moved = false
       drag_offset[1] = x - gs.rect.x
@@ -375,6 +382,7 @@ function love.mousepressed(x, y, button)
     end
   end
   selected = nil
+  set_highlight(nil)
   panel:set_screen(nil)
 end
 

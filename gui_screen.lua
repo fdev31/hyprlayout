@@ -27,6 +27,7 @@ function GuiScreen.new(screen, rect)
   self.highlighted = false
   self.cur_border = 2.0
   self.preview = nil
+  self._pulse = 0
   return self
 end
 
@@ -80,10 +81,15 @@ function GuiScreen:update(dt)
   if not self.rect:equals(self.target_rect) then
     self:_animation_step()
   end
-  if self.highlighted and self.cur_border <= 9 then
-    self.cur_border = self.cur_border + 0.2
-  elseif not self.highlighted and self.cur_border >= 2 then
-    self.cur_border = self.cur_border - 0.2
+  if self.highlighted then
+    self._pulse = self._pulse + dt
+    if self.cur_border < 3 then
+      self.cur_border = self.cur_border + dt * 10
+    end
+  else
+    if self.cur_border > 2 then
+      self.cur_border = self.cur_border - dt * 10
+    end
   end
 end
 
@@ -117,6 +123,19 @@ function GuiScreen:draw()
   love.graphics.setColor(border_color[1] / 255, border_color[2] / 255, border_color[3] / 255)
   love.graphics.setLineWidth(self.cur_border)
   love.graphics.rectangle("line", r.x, r.y, r.width, r.height)
+
+  if self.highlighted then
+    local pulse = 0.5 + 0.5 * math.sin(self._pulse * 3)
+    local inset = 4
+    local iw = r.width - inset * 2
+    local ih = r.height - inset * 2
+    if iw > 0 and ih > 0 then
+      love.graphics.setColor(1, 0.85, 0, 0.4 + pulse * 0.4)
+      love.graphics.setLineWidth(2 + pulse * 3)
+      love.graphics.rectangle("line", r.x + inset, r.y + inset, iw, ih)
+    end
+  end
+  love.graphics.setLineWidth(1)
 
   local tx, ty = r.x + r.width / 2, r.y + r.height / 2
   local font = love.graphics.getFont()
