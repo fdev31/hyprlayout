@@ -165,10 +165,12 @@ local function layout_panel()
   panel.on_center = function() center_layout(true) end
   panel.on_apply_callback = function() action_apply() end
   panel.on_screen_scale_change = function(val)
+    if type(val) ~= "number" then return end
     SCREEN_SCALE = val
     recalculate_all_screens()
   end
   panel.on_ui_scale_change = function(val)
+    if type(val) ~= "number" then return end
     panel.ui_scale_factor = val
     panel_w = math.floor(280 * val)
     layout_panel()

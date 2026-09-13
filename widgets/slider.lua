@@ -87,11 +87,8 @@ function Slider:draw()
   local knob_r = 7
   local knob_x = r.x + fill_w
   local knob_y = r.y + r.height / 2
-  love.graphics.setColor(
-    self._hover or self._dragging and KNOB_HOVER[1] or KNOB_COLOR[1],
-    self._hover or self._dragging and KNOB_HOVER[2] or KNOB_COLOR[2],
-    self._hover or self._dragging and KNOB_HOVER[3] or KNOB_COLOR[3]
-  )
+  local kc = (self._hover or self._dragging) and KNOB_HOVER or KNOB_COLOR
+  love.graphics.setColor(kc[1], kc[2], kc[3])
   love.graphics.circle("fill", knob_x, knob_y, knob_r)
 
   love.graphics.setColor(TEXT_COLOR[1], TEXT_COLOR[2], TEXT_COLOR[3])
