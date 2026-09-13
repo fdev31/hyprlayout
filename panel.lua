@@ -112,32 +112,36 @@ function PANEL:layout(win_w, win_h)
   local cw = self.w - 2 * margin
 
   -- Title
-  self.title = Label.new(x, y, "Screen Settings", { width = cw, height = 20, font_size = 15, align = "center" })
-  y = y + 30
+  self.title = Label.new(x, y, "Screen Settings", { width = cw, height = 20, font_size = math.floor(15 * ui_scale), align = "center" })
+  y = y + math.floor(30 * ui_scale)
 
   -- Screen name
-  self.screen_name = Label.new(x, y, "", { width = cw, height = 20, font_size = 13 })
+  self.screen_name = Label.new(x, y, "", { width = cw, height = 20, font_size = math.floor(13 * ui_scale) })
   y = y + row_h + 5
 
   -- Resolution
-  self.res_label = Label.new(x, y, "Resolution", { width = label_w, height = row_h })
+  self.res_label = Label.new(x, y, "Resolution", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+  local dd_font = math.floor(13 * ui_scale)
   self.resolutions = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
+    font_size = dd_font,
     options = {},
     on_change = function() self:on_resolution_change() end,
   })
   y = y + row_h + 5
 
   -- Frequency
-  self.freq_label = Label.new(x, y, "Refresh", { width = label_w, height = row_h })
+  self.freq_label = Label.new(x, y, "Refresh", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
   self.frequencies = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
+    font_size = dd_font,
     options = {},
     on_change = function() end,
   })
   y = y + row_h + 5
 
   -- Scale
-  self.scale_label = Label.new(x, y, "Scale", { width = label_w, height = row_h })
+  self.scale_label = Label.new(x, y, "Scale", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
   self.scale = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
+    font_size = dd_font,
     options = {
       { name = "0.5", value = 0.5 },
       { name = "0.75", value = 0.75 },
@@ -151,8 +155,9 @@ function PANEL:layout(win_w, win_h)
   y = y + row_h + 5
 
   -- Rotation
-  self.rot_label = Label.new(x, y, "Rotation", { width = label_w, height = row_h })
+  self.rot_label = Label.new(x, y, "Rotation", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
   self.rotation = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
+    font_size = dd_font,
     options = {
       { name = "0 (normal)", value = 0 },
       { name = "1 (90 CW)", value = 1 },
@@ -166,26 +171,26 @@ function PANEL:layout(win_w, win_h)
   y = y + row_h + 10
 
   -- Power
-  self.power_label = Label.new(x, y, "Enabled", { width = label_w, height = row_h })
-  self.power = Toggle.new(x + label_w, y, 50, 20, {
+  self.power_label = Label.new(x, y, "Enabled", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+  self.power = Toggle.new(x + label_w, y, math.floor(50 * ui_scale), math.floor(20 * ui_scale), {
     value = true,
     on_toggle = function(val) self:on_power_toggle(val) end,
   })
   y = y + row_h + 5
 
   -- Screen Scale (canvas pixel ratio)
-  self.ss_label = Label.new(x, y, "Canvas", { width = label_w, height = row_h })
+  self.ss_label = Label.new(x, y, "Canvas", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
   local ss_val = self.screen_scale and self.screen_scale.value or 4
   self.screen_scale = Slider.new(x + label_w, y, cw - label_w, row_h, {
-    min = 2, max = 16, step = 1, value = ss_val,
+    min = 2, max = 16, step = 1, value = ss_val, scale = ui_scale,
     on_change = function(val) self.on_screen_scale_change(val) end,
   })
   y = y + row_h + 5
 
   -- UI Scale
-  self.ui_label = Label.new(x, y, "UI Scale", { width = label_w, height = row_h })
+  self.ui_label = Label.new(x, y, "UI Scale", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
   self.ui_scale = Slider.new(x + label_w, y, cw - label_w, row_h, {
-    min = 0.5, max = 2.0, step = 0.25, value = self.ui_scale_factor or 1.0,
+    min = 0.5, max = 2.0, step = 0.25, value = self.ui_scale_factor or 1.0, scale = ui_scale,
     on_change = function(val) self.on_ui_scale_change(val) end,
   })
   y = y + row_h + 15
@@ -193,20 +198,23 @@ function PANEL:layout(win_w, win_h)
   -- Separator
   y = y + 5
   -- Profiles section
-  self.profile_label = Label.new(x, y, "Profiles", { width = cw, height = 20, font_size = 14 })
-  y = y + 25
+  self.profile_label = Label.new(x, y, "Profiles", { width = cw, height = 20, font_size = math.floor(14 * ui_scale) })
+  y = y + math.floor(25 * ui_scale)
 
   self.profiles_dd = Dropdown.new(x, y, cw, row_h, {
+    font_size = dd_font,
     options = {},
     on_change = function() self:on_profile_select() end,
   })
   y = y + row_h + 5
 
   local bw = math.floor((cw - 3 * margin) / 4)
-  self.btn_save = Button.new(x, y, bw, row_h, "Save", { on_click = function() self:on_save_profile() end })
-  self.btn_load = Button.new(x + bw + margin, y, bw, row_h, "Load", { on_click = function() self:on_load_profile() end })
-  self.btn_new = Button.new(x + 2 * (bw + margin), y, bw, row_h, "New", { on_click = function() self:on_new_profile() end })
+  local btn_font = math.floor(13 * ui_scale)
+  self.btn_save = Button.new(x, y, bw, row_h, "Save", { font_size = btn_font, on_click = function() self:on_save_profile() end })
+  self.btn_load = Button.new(x + bw + margin, y, bw, row_h, "Load", { font_size = btn_font, on_click = function() self:on_load_profile() end })
+  self.btn_new = Button.new(x + 2 * (bw + margin), y, bw, row_h, "New", { font_size = btn_font, on_click = function() self:on_new_profile() end })
   self.btn_delete = Button.new(x + 3 * (bw + margin), y, bw, row_h, "Del", {
+    font_size = btn_font,
     color = { 0.5, 0.2, 0.2 },
     hover_color = { 0.6, 0.25, 0.25 },
     on_click = function() self:on_delete_profile() end,
@@ -215,18 +223,21 @@ function PANEL:layout(win_w, win_h)
 
   -- Apply section
   local apply_w = math.floor((cw - MARGIN) / 2)
-  self.btn_apply = Button.new(x, y, apply_w, 35, "Apply", {
+  local apply_h = math.floor(35 * ui_scale)
+  self.btn_apply = Button.new(x, y, apply_w, apply_h, "Apply", {
+    font_size = btn_font,
     color = { 0.2, 0.5, 0.3 },
     hover_color = { 0.25, 0.6, 0.35 },
     on_click = function() self:on_apply() end,
   })
-  self.btn_center = Button.new(x + apply_w + MARGIN, y, apply_w, 35, "Center", {
+  self.btn_center = Button.new(x + apply_w + MARGIN, y, apply_w, apply_h, "Center", {
+    font_size = btn_font,
     on_click = function() if self.on_center then self.on_center() end end,
   })
-  y = y + 45
+  y = y + apply_h + 10
 
   -- Status
-  self.status = Label.new(x, y, "", { width = cw, height = 20, color = { 1, 0.9, 0.5 } })
+  self.status = Label.new(x, y, "", { width = cw, height = 20, font_size = math.floor(14 * ui_scale), color = { 1, 0.9, 0.5 } })
 
   -- Store all widgets for event dispatch
   self.widgets = {

@@ -19,7 +19,8 @@ function Slider.new(x, y, w, h, opts)
   self.on_change = opts.on_change or function() end
   self._dragging = false
   self._hover = false
-  self.font_size = 12
+  self.scale = opts.scale or 1.0
+  self.font_size = math.floor(12 * self.scale)
   self._font = love.graphics.newFont(self.font_size)
   return self
 end
@@ -71,7 +72,7 @@ function Slider:draw()
   local r = self.rect
   love.graphics.setFont(self._font)
 
-  local track_h = 4
+  local track_h = math.max(2, math.floor(4 * self.scale))
   local track_y = r.y + r.height / 2 - track_h / 2
 
   love.graphics.setColor(TRACK_COLOR[1], TRACK_COLOR[2], TRACK_COLOR[3])
@@ -84,7 +85,7 @@ function Slider:draw()
     love.graphics.rectangle("fill", r.x, track_y, fill_w, track_h, 2, 2)
   end
 
-  local knob_r = 7
+  local knob_r = math.floor(7 * self.scale)
   local knob_x = r.x + fill_w
   local knob_y = r.y + r.height / 2
   local kc = (self._hover or self._dragging) and KNOB_HOVER or KNOB_COLOR
