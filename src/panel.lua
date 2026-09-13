@@ -266,12 +266,21 @@ function PANEL:layout(win_w, win_h)
     self.screen_name = Label.new(x, y, "", { width = cw, height = 20, font_size = math.floor(13 * ui_scale) })
     y = y + row_h + 5
 
-    -- Power
+    -- Power (preserve instance across re-layouts so the knob keeps animating)
     self.power_label = Label.new(x, y, "Enabled", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
-    self.power = Toggle.new(x + label_w, y, math.floor(50 * ui_scale), math.floor(20 * ui_scale), {
-      value = true,
-      on_toggle = function(val) self:on_power_toggle(val) end,
-    })
+    local power_active = self.selected_gs and self.selected_gs.screen.active or true
+    if self.power then
+      self.power.rect.x = x + label_w
+      self.power.rect.y = y
+      self.power.rect.width = math.floor(50 * ui_scale)
+      self.power.rect.height = math.floor(20 * ui_scale)
+      self.power.toggled = power_active
+    else
+      self.power = Toggle.new(x + label_w, y, math.floor(50 * ui_scale), math.floor(20 * ui_scale), {
+        value = power_active,
+        on_toggle = function(val) self:on_power_toggle(val) end,
+      })
+    end
     y = y + row_h + 5
 
     -- Resolution
@@ -325,11 +334,21 @@ function PANEL:layout(win_w, win_h)
     y = y + row_h + 5
 
     -- HDR (master toggle: enables 10 bit + color management + SDR options)
+    -- Preserve instance across re-layouts so the knob keeps animating.
     self.hdr_label = Label.new(x, y, "HDR", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
-    self.hdr = Toggle.new(x + label_w, y, math.floor(50 * ui_scale), math.floor(20 * ui_scale), {
-      value = false,
-      on_toggle = function(val) self:on_hdr_toggle(val) end,
-    })
+    local hdr_init = self.selected_gs and self.selected_gs.screen.hdr_enabled or false
+    if self.hdr then
+      self.hdr.rect.x = x + label_w
+      self.hdr.rect.y = y
+      self.hdr.rect.width = math.floor(50 * ui_scale)
+      self.hdr.rect.height = math.floor(20 * ui_scale)
+      self.hdr.toggled = hdr_init
+    else
+      self.hdr = Toggle.new(x + label_w, y, math.floor(50 * ui_scale), math.floor(20 * ui_scale), {
+        value = hdr_init,
+        on_toggle = function(val) self:on_hdr_toggle(val) end,
+      })
+    end
     y = y + row_h + 5
 
     -- HDR sub-options (only shown when HDR is enabled)
