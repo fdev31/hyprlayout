@@ -297,7 +297,7 @@ function PANEL:layout(win_w, win_h)
     self.frequencies = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
       font_size = dd_font,
       options = {},
-      on_change = function() end,
+      on_change = function() self:on_frequency_change() end,
     })
     y = y + row_h + 5
 
@@ -572,8 +572,22 @@ function PANEL:on_resolution_change()
   gs.target_rect.width = new_w
   gs.target_rect.height = new_h
   self:update_frequencies()
+  local freq_opt = self.frequencies:get_selected()
+  if freq_opt and freq_opt.value then
+    screen.mode.freq = freq_opt.value
+  end
   if self.on_screen_resized then
     self.on_screen_resized(gs, old_w, old_h)
+  end
+end
+
+function PANEL:on_frequency_change()
+  local gs = self.selected_gs
+  if not gs then return end
+  local opt = self.frequencies:get_selected()
+  if not opt or not opt.value then return end
+  if gs.screen.mode then
+    gs.screen.mode.freq = opt.value
   end
 end
 
