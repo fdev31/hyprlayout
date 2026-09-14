@@ -124,6 +124,7 @@ function PANEL.new()
   self.selected_gs = nil
   self.screen_settings_visible = false
   self.attract_enabled = true
+  self.shot_interval_value = 10
   self.scroll = 0
   self._max_scroll = 0
   self._scroll_widgets = {}
@@ -206,7 +207,7 @@ function PANEL:layout(win_w, win_h)
   local ss_val = self.screen_scale and self.screen_scale.value or PANEL.DEFAULT_CANVAS_SCALE
   self.screen_scale = Slider.new(x + label_w, y, cw - label_w, row_h, {
     min = 2, max = 16, step = 1, value = ss_val, scale = ui_scale,
-    on_change = function(val) self.on_screen_scale_change(val) end,
+    on_change = function(val) self:on_screen_scale_change(val) end,
   })
   y = y + row_h + 5
 
@@ -214,7 +215,7 @@ function PANEL:layout(win_w, win_h)
   self.ui_label = Label.new(x, y, "UI Scale", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
   self.ui_scale = Slider.new(x + label_w, y, cw - label_w, row_h, {
     min = 0.5, max = 1.5, step = 0.25, value = self.ui_scale_factor or 1.0, scale = ui_scale,
-    on_change = function(val) self.on_ui_scale_change(val) end,
+    on_change = function(val) self:on_ui_scale_change(val) end,
   })
   y = y + row_h + 5
 
@@ -223,6 +224,14 @@ function PANEL:layout(win_w, win_h)
   self.attract = Toggle.new(x + label_w, y, math.floor(50 * ui_scale), math.floor(20 * ui_scale), {
     value = self.attract_enabled ~= false,
     on_toggle = function(val) self.on_attract_toggle(val) end,
+  })
+  y = y + row_h + 5
+
+  -- Screenshot / refresh interval
+  self.shot_interval_label = Label.new(x, y, "Interval", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+  self.shot_interval = Slider.new(x + label_w, y, cw - label_w, row_h, {
+    min = 0.5, max = 10, step = 0.5, value = self.shot_interval_value or 10, scale = ui_scale,
+    on_change = function(val) self:on_shot_interval_change(val) end,
   })
   y = y + row_h + 5
 
@@ -252,7 +261,7 @@ function PANEL:layout(win_w, win_h)
   -- General widgets
   local general_widgets = {
     self.btn_reload, self.btn_apply,
-    self.screen_scale, self.ui_scale, self.attract,
+    self.screen_scale, self.ui_scale, self.attract, self.shot_interval,
     self.profiles_dd,
     self.btn_save, self.btn_load, self.btn_new, self.btn_delete,
   }
@@ -422,6 +431,7 @@ function PANEL:layout(win_w, win_h)
   track(self.ss_label)
   track(self.ui_label)
   track(self.attract_label)
+  track(self.shot_interval_label)
   track(self.profile_label)
   if self.screen_settings_visible then
     track(self.screen_title)
@@ -679,6 +689,13 @@ function PANEL:on_attract_toggle(val)
   end
 end
 
+function PANEL:on_shot_interval_change(val)
+  self.shot_interval_value = val
+  if self.on_shot_interval_change_callback then
+    self.on_shot_interval_change_callback(val)
+  end
+end
+
 function PANEL:on_screen_scale_change(val)
   if self.on_screen_scale_change then
     self.on_screen_scale_change(val)
@@ -893,6 +910,7 @@ function PANEL:draw()
   self.ss_label:draw()
   self.ui_label:draw()
   self.attract_label:draw()
+  self.shot_interval_label:draw()
   self.profile_label:draw()
 
   -- Screen settings labels (conditional)

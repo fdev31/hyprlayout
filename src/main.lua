@@ -77,6 +77,7 @@ local function save_settings()
     canvas_scale = SCREEN_SCALE,
     ui_scale = panel.ui_scale_factor,
     attract_enabled = panel.attract_enabled,
+    shot_interval = SCREENSHOT_INTERVAL,
   })
 end
 
@@ -217,6 +218,14 @@ local function layout_panel()
   end
   panel.on_attract_toggle = function(val)
     panel.attract_enabled = val
+    save_settings()
+  end
+  panel.on_shot_interval_change_callback = function(val)
+    if type(val) ~= "number" then return end
+    val = math.max(0.5, math.min(10, val))
+    if val == SCREENSHOT_INTERVAL then return end
+    SCREENSHOT_INTERVAL = val
+    shot_timer = math.min(shot_timer, val)
     save_settings()
   end
   panel:update_profiles()
@@ -481,6 +490,10 @@ function love.load()
   end
   if saved.attract_enabled ~= nil then
     panel.attract_enabled = saved.attract_enabled
+  end
+  if saved.shot_interval then
+    SCREENSHOT_INTERVAL = math.max(0.5, math.min(10, saved.shot_interval))
+    panel.shot_interval_value = SCREENSHOT_INTERVAL
   end
 
   load_screens()
