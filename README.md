@@ -9,10 +9,28 @@ Ported from `wlr-layout-ui` (see `PORTING_NOTES.md`).
 
 ## Requirements
 
+**Required**
+
 - Linux (developed and tested on Arch)
-- [Hyprland](https://hyprland.org/) running — the app drives `hyprctl`
-- [LÖVE 11.5](https://love2d.org/) — only needed to run from source or the
-  `.love` archive. The self-contained executable (below) needs no LÖVE install.
+- [Hyprland](https://hyprland.org/) running — the app reads and applies
+  monitor configuration through `hyprctl`
+- [LÖVE 11.5](https://love2d.org/) — to run from source or the `.love`
+  archive. The self-contained executable (below) needs no LÖVE install.
+
+**Optional — live screen preview**
+
+The per-monitor preview thumbnails are captured with a Wayland screencapture
+tool and downscaled with an image scaler. If either is missing the app still
+runs normally; the preview is simply omitted.
+
+- `grim` — captures each monitor
+- one of the following, to downscale each capture:
+  - ImageMagick 6 → `convert`
+  - ImageMagick 7 → `magick`
+  - `ffmpeg`
+
+On Arch: `sudo pacman -S grim imagemagick` (or `ffmpeg` instead of
+`imagemagick`).
 
 ## Running from source
 
