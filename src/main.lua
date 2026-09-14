@@ -7,6 +7,7 @@ local Panel = require("panel")
 local apply = require("core.apply")
 local settings = require("core.settings")
 local profiles = require("core.profiles")
+local ffi = require("ffi")
 
 local SCREEN_SCALE = Panel.DEFAULT_CANVAS_SCALE
 local CONFIRM_DELAY = 20
@@ -254,13 +255,25 @@ local function poll_screenshots()
     local msg = shot_channel:pop()
     if not msg then break end
     if msg.type == "screenshot" then
-      local rel_path = "shots/" .. msg.file
-      local ok, img = pcall(love.graphics.newImage, rel_path)
-      if ok and img then
-        shot_images[msg.uid] = img
-        for _, gs in ipairs(gui_screens) do
-          if gs.screen.uid == msg.uid then
-            gs:set_preview(img)
+      -- The capture thread wrote raw RGBA (w*h*4 bytes) to the XDG cache dir.
+      -- This LÖVE build can't newImage() an absolute path, so decode the bytes
+      -- straight into an ImageData buffer via ffi.
+      local w, h = msg.w, msg.h
+      if w and h then
+        local f = io.open(shot_dir .. "/" .. msg.file, "rb")
+        if f then
+          local bytes = f:read("*a")
+          f:close()
+          if bytes and #bytes == w * h * 4 then
+            local id = love.image.newImageData(w, h)
+            ffi.copy(id:getPointer(), bytes, w * h * 4)
+            local img = love.graphics.newImage(id)
+            shot_images[msg.uid] = img
+            for _, gs in ipairs(gui_screens) do
+              if gs.screen.uid == msg.uid then
+                gs:set_preview(img)
+              end
+            end
           end
         end
       end
@@ -449,8 +462,14 @@ function love.load()
   gui_initialized = true
   math.randomseed(os.time())
   shot_channel = love.thread.getChannel("screenshots")
-  local cwd = love.filesystem.getWorkingDirectory()
-  shot_dir = cwd .. "/shots"
+  -- Captures are cached in the XDG cache dir, never the game dir / repo. This
+  -- LÖVE build can't load images from an absolute path, so the capture thread
+  -- writes raw RGBA here and the main thread decodes it into an Image via ffi.
+  local cache_base = os.getenv("XDG_CACHE_HOME")
+  if not cache_base or cache_base == "" then
+    cache_base = (os.getenv("HOME") or "/tmp") .. "/.cache"
+  end
+  shot_dir = cache_base .. "/hyprlayout/shots"
 
   local saved = settings.load()
   if saved.canvas_scale then
