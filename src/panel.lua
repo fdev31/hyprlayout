@@ -698,14 +698,14 @@ function PANEL:on_shot_interval_change(val)
 end
 
 function PANEL:on_screen_scale_change(val)
-  if self.on_screen_scale_change then
-    self.on_screen_scale_change(val)
+  if self.on_screen_scale_change_callback then
+    self.on_screen_scale_change_callback(val)
   end
 end
 
 function PANEL:on_ui_scale_change(val)
-  if self.on_ui_scale_change then
-    self.on_ui_scale_change(val)
+  if self.on_ui_scale_change_callback then
+    self.on_ui_scale_change_callback(val)
   end
 end
 

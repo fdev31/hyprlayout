@@ -199,8 +199,8 @@ local function layout_panel()
   panel.on_screen_changed = on_screen_changed
   panel.on_screen_resized = on_screen_resized
   panel.on_apply_callback = function() action_apply() end
-  panel.on_screen_scale_change = change_canvas_scale
-  panel.on_ui_scale_change = function(val)
+  panel.on_screen_scale_change_callback = change_canvas_scale
+  panel.on_ui_scale_change_callback = function(val)
     if type(val) ~= "number" then return end
     panel.ui_scale_factor = val
     panel_w = math.floor(Panel.PANEL_W * val)
