@@ -207,6 +207,7 @@ function PANEL:layout(win_w, win_h)
   local ss_val = self.screen_scale and self.screen_scale.value or PANEL.DEFAULT_CANVAS_SCALE
   self.screen_scale = Slider.new(x + label_w, y, cw - label_w, row_h, {
     min = 2, max = 16, step = 1, value = ss_val, scale = ui_scale,
+    format = function(v) return "1/" .. v end,
     on_change = function(val) self:on_screen_scale_change(val) end,
   })
   y = y + row_h + 5

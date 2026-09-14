@@ -18,6 +18,7 @@ function Slider.new(x, y, w, h, opts)
   self.value = opts.value or self.min
   self.step = opts.step or 1
   self.on_change = opts.on_change or function() end
+  self.format = opts.format or function(v) return tostring(v) end
   self._dragging = false
   self._hover = false
   self.scale = opts.scale or 1.0
@@ -115,7 +116,7 @@ function Slider:draw()
 
   -- Value label in the reserved left column (right-aligned, next to the track)
   love.graphics.setColor(TEXT_COLOR[1], TEXT_COLOR[2], TEXT_COLOR[3])
-  local val_text = tostring(self.value)
+  local val_text = self.format(self.value)
   local tw = self._font:getWidth(val_text)
   love.graphics.print(val_text, track_x - tw - 6, r.y + (r.height - self._font:getHeight()) / 2)
 end
