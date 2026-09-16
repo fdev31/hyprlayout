@@ -34,6 +34,10 @@ local function sorted_resolutions(available)
 	return res
 end
 
+local draw_line = function(x, w, rect)
+	love.graphics.setLineWidth(1)
+	love.graphics.line(x, rect.y - 5, x + w, rect.y - 5)
+end
 local function sorted_frequencies(available, w, h)
 	local freqs = {}
 	for _, m in ipairs(available) do
@@ -278,7 +282,12 @@ function PANEL:layout(win_w, win_h)
 	y = y + row_h + 5
 
 	-- Profiles section
-	self.profile_label = Label.new(x, y, "Profiles", { width = cw, height = 20, font_size = math.floor(14 * ui_scale) })
+	self.profile_label = Label.new(
+		x,
+		y,
+		"Profiles",
+		{ width = cw, height = 20, font_size = math.floor(15 * ui_scale), align = "center" }
+	)
 	y = y + math.floor(25 * ui_scale)
 
 	self.profiles_dd = Dropdown.new(x, y, cw, row_h, {
@@ -1094,15 +1103,18 @@ function PANEL:draw()
 
 	-- General labels
 	self.title:draw()
-	self.ss_label:draw()
+	-- draw a line above title
+	love.graphics.setColor(0.3, 0.3, 0.4)
 	self.ui_label:draw()
 	self.attract_label:draw()
 	self.shot_interval_label:draw()
 	self.profile_label:draw()
+	draw_line(self.x, self.w, self.profile_label.rect)
 
 	-- Screen settings labels (conditional)
 	if self.screen_settings_visible then
 		self.screen_title:draw()
+		draw_line(self.x, self.w, self.screen_title.rect)
 		self.screen_name:draw()
 		self.power_label:draw()
 		self.res_label:draw()
