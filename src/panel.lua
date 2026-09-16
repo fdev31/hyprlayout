@@ -730,38 +730,28 @@ function PANEL:on_frequency_change()
 	end
 end
 
-function PANEL:on_scale_change()
+function PANEL:_apply_scalar_change(dd, field)
 	local gs = self.selected_gs
 	if not gs then
 		return
 	end
-	local opt = self.scale:get_selected()
+	local opt = dd:get_selected()
 	if not opt then
 		return
 	end
-	local screen = gs.screen
-	screen.scale = opt.value
+	gs.screen[field] = opt.value
 	local old_w, old_h = gs:resize_to_mode(self.screen_scale.value)
 	if old_w and self.on_screen_resized then
 		self.on_screen_resized(gs, old_w, old_h)
 	end
 end
 
+function PANEL:on_scale_change()
+	self:_apply_scalar_change(self.scale, "scale")
+end
+
 function PANEL:on_rotation_change()
-	local gs = self.selected_gs
-	if not gs then
-		return
-	end
-	local opt = self.rotation:get_selected()
-	if not opt then
-		return
-	end
-	local screen = gs.screen
-	screen.transform = opt.value
-	local old_w, old_h = gs:resize_to_mode(self.screen_scale.value)
-	if old_w and self.on_screen_resized then
-		self.on_screen_resized(gs, old_w, old_h)
-	end
+	self:_apply_scalar_change(self.rotation, "transform")
 end
 
 function PANEL:on_power_toggle(val)
