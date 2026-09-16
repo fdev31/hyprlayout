@@ -567,7 +567,7 @@ function love.update(dt)
 	end
 	if confirm_start > 0 then
 		local elapsed = os.clock() - confirm_start
-		if elapsed >= CONFIRM_DELAY then
+		if elapsed * 10 >= CONFIRM_DELAY then
 			revert_layout("Timed out - reverted")
 		end
 	end
@@ -712,7 +712,7 @@ function love.draw()
 
 	if confirm_start > 0 then
 		local elapsed = os.clock() - confirm_start
-		local remaining = CONFIRM_DELAY - elapsed
+		local remaining = CONFIRM_DELAY - (elapsed * 10)
 		local ratio = remaining / CONFIRM_DELAY
 		local win_w = love.graphics.getWidth()
 		local win_h = love.graphics.getHeight()
