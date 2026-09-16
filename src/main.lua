@@ -30,11 +30,25 @@ local shot_timer = 0
 local help_visible = false
 local gui_initialized = false
 
-local function get_screen_size(screen)
-	if not screen.mode then
-		return 100, 100
+local function build_gui_screens(info, scale)
+	local list = {}
+	for _, screen in ipairs(info) do
+		local x, y = screen.position[1], screen.position[2]
+		local w, h
+		if screen.mode then
+			w, h = Rect.screen_size(screen.mode.width, screen.mode.height, screen.scale, scale, screen.transform)
+		else
+			local max_w, max_h = 1920, 1080
+			for _, m in ipairs(screen.available) do
+				max_w = math.max(max_w, m.width)
+				max_h = math.max(max_h, m.height)
+			end
+			w, h = Rect.screen_size(max_w, max_h, screen.scale, scale, screen.transform)
+		end
+		local rect = Rect.new(math.floor(x / scale), math.floor(y / scale), w, h)
+		table.insert(list, GuiScreen.new(screen, rect))
 	end
-	return Rect.screen_size(screen.mode.width, screen.mode.height, screen.scale, SCREEN_SCALE, screen.transform)
+	return list
 end
 
 local function canvas_w()
@@ -139,23 +153,7 @@ local function load_screens()
 		return
 	end
 
-	local info = screens.displayInfo
-
-	for _, screen in ipairs(info) do
-		local x, y = screen.position[1], screen.position[2]
-		local w, h
-		if screen.mode then
-			w, h = get_screen_size(screen)
-		else
-			local max_w, max_h = 1920, 1080
-			for _, m in ipairs(screen.available) do
-				max_w = math.max(max_w, m.width)
-				max_h = math.max(max_h, m.height)
-			end
-			w, h = Rect.screen_size(max_w, max_h, screen.scale, SCREEN_SCALE, screen.transform)
-		end
-		local rect = Rect.new(math.floor(x / SCREEN_SCALE), math.floor(y / SCREEN_SCALE), w, h)
-		local gs = GuiScreen.new(screen, rect)
+	for _, gs in ipairs(build_gui_screens(screens.displayInfo, SCREEN_SCALE)) do
 		gs:genColor()
 		table.insert(gui_screens, gs)
 	end
@@ -326,23 +324,7 @@ local function headless_apply(data, canvas_scale)
 		return
 	end
 
-	local gs_list = {}
-	for _, screen in ipairs(screens.displayInfo) do
-		local x, y = screen.position[1], screen.position[2]
-		local w, h
-		if screen.mode then
-			w, h = Rect.screen_size(screen.mode.width, screen.mode.height, screen.scale, canvas_scale, screen.transform)
-		else
-			local max_w, max_h = 1920, 1080
-			for _, m in ipairs(screen.available) do
-				max_w = math.max(max_w, m.width)
-				max_h = math.max(max_h, m.height)
-			end
-			w, h = Rect.screen_size(max_w, max_h, screen.scale, canvas_scale, screen.transform)
-		end
-		local rect = Rect.new(math.floor(x / canvas_scale), math.floor(y / canvas_scale), w, h)
-		table.insert(gs_list, GuiScreen.new(screen, rect))
-	end
+	local gs_list = build_gui_screens(screens.displayInfo, canvas_scale)
 
 	for _, entry in ipairs(data.screens or {}) do
 		for _, gs in ipairs(gs_list) do
