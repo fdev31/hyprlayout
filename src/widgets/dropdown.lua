@@ -94,15 +94,7 @@ end
 
 function Dropdown:on_move(mx, my)
 	if self._open then
-		local opt_h = self.rect.height
-		self._hover_option = -1
-		for i = 1, #self.options do
-			local oy = self.rect.y + i * opt_h
-			if mx >= self.rect.x and mx <= self.rect.x + self.rect.width and my >= oy and my <= oy + opt_h then
-				self._hover_option = i
-				break
-			end
-		end
+		self._hover_option = self:hit_options(mx, my) or -1
 	else
 		self._hover = self:hit(mx, my)
 	end
