@@ -1,4 +1,5 @@
 local Widget = require("widgets.widget")
+local Rect = require("core.rect")
 
 local ANIMATION_LENGTH = 8
 local SCREEN_BORDER = 2
@@ -56,6 +57,26 @@ function GuiScreen:set_position(x, y)
 	self.rect.y = y
 	self.target_rect.x = x
 	self.target_rect.y = y
+end
+
+-- Recompute target size from the current mode and apply it.
+-- Returns the previous width/height, or nothing if there is no mode.
+function GuiScreen:resize_to_mode(canvas_scale)
+	local screen = self.screen
+	if not screen.mode then
+		return
+	end
+	local old_w, old_h = self.target_rect.width, self.target_rect.height
+	local new_w, new_h = Rect.screen_size(
+		screen.mode.width,
+		screen.mode.height,
+		screen.scale,
+		canvas_scale,
+		screen.transform
+	)
+	self.target_rect.width = new_w
+	self.target_rect.height = new_h
+	return old_w, old_h
 end
 
 function GuiScreen:_animation_step()
