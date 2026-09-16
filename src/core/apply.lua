@@ -61,6 +61,8 @@ function M.make_commands(gui_screens, canvas_scale)
 						screen.sdrsaturation or 1.0,
 						screen.sdr_eotf or "default"
 					)
+			else
+				cmd = cmd .. string.format(", bitdepth=8")
 			end
 			cmd = cmd .. "})"
 			table.insert(cmds, cmd)
