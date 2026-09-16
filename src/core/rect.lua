@@ -20,32 +20,8 @@ function Rect:copy()
 	return Rect.new(self.x, self.y, self.width, self.height)
 end
 
-function Rect:scaled(factor)
-	return Rect.new(self.x * factor, self.y * factor, self.width * factor, self.height * factor)
-end
-
 function Rect:equals(other)
 	return self.x == other.x and self.y == other.y and self.width == other.width and self.height == other.height
-end
-
-function Rect:center()
-	return self.x + self.width / 2, self.y + self.height / 2
-end
-
-function Rect:topleft()
-	return self.x, self.y
-end
-
-function Rect:topright()
-	return self.x + self.width, self.y
-end
-
-function Rect:bottomright()
-	return self.x + self.width, self.y + self.height
-end
-
-function Rect:bottomleft()
-	return self.x, self.y + self.height
 end
 
 function Rect:ref_points()
