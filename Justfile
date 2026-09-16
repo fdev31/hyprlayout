@@ -1,6 +1,8 @@
 # hyprlayout build/run helpers (Linux only).
 #
 #   just            run the app from source
+#   just lint       run luacheck over src/
+#   just check      run luacheck, then build the .love archive
 #   just build      build both dist/ artifacts (self-contained exe + .love file)
 #   just love       build only the dist/hyprlayout.love file (fast, no LÖVE build)
 #   just run        build, then run the self-contained executable
@@ -20,6 +22,15 @@
 #                       codecs), present on any desktop Linux.
 # The first build clones LÖVE and compiles it (a few minutes); later builds are
 # fast because the source and build tree are cached in .love-build/.
+
+# Run luacheck static analysis over src/.
+lint:
+    luacheck src
+
+# Static checks: luacheck, then build the .love archive.
+check:
+    @just lint
+    @just love
 
 # Run the app from the source tree.
 default:
