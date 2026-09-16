@@ -1,4 +1,3 @@
-local Widget = require("widgets.widget")
 local Button = require("widgets.button")
 local Dropdown = require("widgets.dropdown")
 local Label = require("widgets.label")
@@ -6,7 +5,6 @@ local Toggle = require("widgets.toggle")
 local Slider = require("widgets.slider")
 local Modal = require("widgets.modal")
 local profiles = require("core.profiles")
-local apply = require("core.apply")
 local Rect = require("core.rect")
 
 local PANEL = {}

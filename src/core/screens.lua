@@ -59,7 +59,7 @@ function M.load()
 	M.error = nil
 
 	local out = run("hyprctl -j monitors all")
-	local monitors, err = json.decode(out)
+	local monitors = json.decode(out)
 	if not monitors or type(monitors) ~= "table" then
 		M.error = "Failed to get monitors from hyprctl:\n" .. out:sub(1, 200)
 		print(M.error)

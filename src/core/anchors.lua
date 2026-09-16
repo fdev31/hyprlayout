@@ -1,5 +1,3 @@
-local Rect = require("core.rect")
-
 local M = {}
 
 local TOL = 2
