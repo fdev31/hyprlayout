@@ -88,10 +88,4 @@ function M.run_commands(cmds)
 	end
 end
 
-function M.apply(gui_screens, canvas_scale)
-	local cmds = M.make_commands(gui_screens, canvas_scale)
-	M.run_commands(cmds)
-	return true
-end
-
 return M
