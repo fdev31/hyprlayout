@@ -7,8 +7,6 @@ local SNAP_RADIUS = 300
 
 local M = {}
 
-M.SNAP_RADIUS = SNAP_RADIUS
-
 local function snap_weight(ac_types, oc_types)
 	local opposite = {
 		["left|right"] = true,
