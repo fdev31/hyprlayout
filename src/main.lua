@@ -857,8 +857,6 @@ function love.textinput(txt)
 	end
 end
 
-function love.keyreleased(key) end
-
 function love.keypressed(key)
 	if panel:modal_keypressed(key) then
 		return
