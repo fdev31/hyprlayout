@@ -182,6 +182,39 @@ function PANEL:layout(win_w, win_h)
 		return Label.new(px, py, text, { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
 	end
 
+	-- Preserve a toggle instance across re-layouts (so its knob keeps animating),
+	-- repositioning it in place; otherwise create a new one.
+	local function ensure_toggle(existing, init_val, on_toggle)
+		local tw, th = math.floor(50 * ui_scale), math.floor(20 * ui_scale)
+		if existing then
+			existing.rect.x = x + label_w
+			existing.rect.y = y
+			existing.rect.width = tw
+			existing.rect.height = th
+			existing.toggled = init_val
+		else
+			existing = Toggle.new(x + label_w, y, tw, th, { value = init_val, on_toggle = on_toggle })
+		end
+		return existing
+	end
+
+	-- A label + 0..3 SDR slider row; advances the layout cursor.
+	local function sdr_row(label_text, field)
+		local lbl = row_label(x, y, label_text)
+		local s = Slider.new(x + label_w, y, cw - label_w, row_h, {
+			min = 0.0,
+			max = 3.0,
+			step = 0.01,
+			value = 1.0,
+			scale = ui_scale,
+			on_change = function(v)
+				self:_set_screen_field(field, v)
+			end,
+		})
+		y = y + row_h + 5
+		return lbl, s
+	end
+
 	self.widgets = {}
 	self.screen_widgets = {}
 
@@ -350,20 +383,9 @@ function PANEL:layout(win_w, win_h)
 		self.power_label =
 			row_label(x, y, "Enabled")
 		local power_active = self.selected_gs and self.selected_gs.screen.active or true
-		if self.power then
-			self.power.rect.x = x + label_w
-			self.power.rect.y = y
-			self.power.rect.width = math.floor(50 * ui_scale)
-			self.power.rect.height = math.floor(20 * ui_scale)
-			self.power.toggled = power_active
-		else
-			self.power = Toggle.new(x + label_w, y, math.floor(50 * ui_scale), math.floor(20 * ui_scale), {
-				value = power_active,
-				on_toggle = function(val)
-					self:on_power_toggle(val)
-				end,
-			})
-		end
+		self.power = ensure_toggle(self.power, power_active, function(val)
+			self:on_power_toggle(val)
+		end)
 		y = y + row_h + 5
 
 		-- Resolution
@@ -433,20 +455,9 @@ function PANEL:layout(win_w, win_h)
 		self.hdr_label =
 			row_label(x, y, "HDR")
 		local hdr_init = self.selected_gs and self.selected_gs.screen.hdr_enabled or false
-		if self.hdr then
-			self.hdr.rect.x = x + label_w
-			self.hdr.rect.y = y
-			self.hdr.rect.width = math.floor(50 * ui_scale)
-			self.hdr.rect.height = math.floor(20 * ui_scale)
-			self.hdr.toggled = hdr_init
-		else
-			self.hdr = Toggle.new(x + label_w, y, math.floor(50 * ui_scale), math.floor(20 * ui_scale), {
-				value = hdr_init,
-				on_toggle = function(val)
-					self:on_hdr_toggle(val)
-				end,
-			})
-		end
+		self.hdr = ensure_toggle(self.hdr, hdr_init, function(val)
+			self:on_hdr_toggle(val)
+		end)
 		y = y + row_h + 5
 
 		-- HDR sub-options (only shown when HDR is enabled)
@@ -464,37 +475,9 @@ function PANEL:layout(win_w, win_h)
 			})
 			y = y + row_h + 5
 
-			self.sdrb_label = Label.new(
-				x,
-				y,
-				"SDR Bright",
-				{ width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) }
-			)
-			self.sdrbrightness = Slider.new(x + label_w, y, cw - label_w, row_h, {
-				min = 0.0,
-				max = 3.0,
-				step = 0.01,
-				value = 1.0,
-				scale = ui_scale,
-				on_change = function(val)
-					self:on_sdrbrightness_change(val)
-				end,
-			})
-			y = y + row_h + 5
+			self.sdrb_label, self.sdrbrightness = sdr_row("SDR Bright", "sdrbrightness")
 
-			self.sdrs_label =
-				row_label(x, y, "SDR Sat")
-			self.sdrsaturation = Slider.new(x + label_w, y, cw - label_w, row_h, {
-				min = 0.0,
-				max = 3.0,
-				step = 0.01,
-				value = 1.0,
-				scale = ui_scale,
-				on_change = function(val)
-					self:on_sdrsaturation_change(val)
-				end,
-			})
-			y = y + row_h + 5
+			self.sdrs_label, self.sdrsaturation = sdr_row("SDR Sat", "sdrsaturation")
 
 			self.sdr_eotf_label =
 				row_label(x, y, "SDR EOTF")
@@ -773,49 +756,34 @@ function PANEL:_set_screen_field(field, val)
 	gs.screen[field] = val
 end
 
+function PANEL:_set_screen_field_from_dd(dd, field)
+	local gs = self.selected_gs
+	if not gs then
+		return
+	end
+	local opt = dd:get_selected()
+	if opt then
+		gs.screen[field] = opt.value
+	end
+end
+
 function PANEL:on_power_toggle(val)
 	self:_set_screen_field("active", val)
 end
 
 function PANEL:on_hdr_toggle(val)
-	local gs = self.selected_gs
-	if not gs then
-		return
-	end
-	gs.screen.hdr_enabled = val
+	self:_set_screen_field("hdr_enabled", val)
 	if self.on_visibility_changed then
 		self.on_visibility_changed()
 	end
 end
 
 function PANEL:on_cm_change()
-	local gs = self.selected_gs
-	if not gs then
-		return
-	end
-	local opt = self.cm:get_selected()
-	if opt then
-		gs.screen.cm = opt.value
-	end
-end
-
-function PANEL:on_sdrbrightness_change(val)
-	self:_set_screen_field("sdrbrightness", val)
-end
-
-function PANEL:on_sdrsaturation_change(val)
-	self:_set_screen_field("sdrsaturation", val)
+	self:_set_screen_field_from_dd(self.cm, "cm")
 end
 
 function PANEL:on_sdr_eotf_change()
-	local gs = self.selected_gs
-	if not gs then
-		return
-	end
-	local opt = self.sdr_eotf:get_selected()
-	if opt then
-		gs.screen.sdr_eotf = opt.value
-	end
+	self:_set_screen_field_from_dd(self.sdr_eotf, "sdr_eotf")
 end
 
 function PANEL:on_attract_toggle(val)
