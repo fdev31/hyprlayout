@@ -32,7 +32,7 @@ function Screen.new(opts)
 	}, Screen)
 end
 
-local M = { Mode = Mode, Screen = Screen }
+local M = {}
 M.displayInfo = {}
 M.error = nil
 
