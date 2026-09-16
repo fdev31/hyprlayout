@@ -133,6 +133,14 @@ end
 
 -- Handle a vertical wheel event while hovering the panel.
 -- Returns true if the event was consumed by the panel.
+function PANEL:_clamp_scroll(v)
+	return math.max(0, math.min(self._max_scroll, v))
+end
+
+function PANEL:_error(err)
+	self.status:set_text("Error: " .. tostring(err))
+end
+
 function PANEL:handle_scroll(dy)
 	if not self.visible then
 		return false
@@ -144,8 +152,7 @@ function PANEL:handle_scroll(dy)
 	if self._max_scroll <= 0 then
 		return true
 	end
-	local new_scroll = self.scroll - dy * 40
-	new_scroll = math.max(0, math.min(self._max_scroll, new_scroll))
+	local new_scroll = self:_clamp_scroll(self.scroll - dy * 40)
 	if new_scroll ~= self.scroll then
 		self.scroll = new_scroll
 		self:apply_scroll()
@@ -589,7 +596,7 @@ function PANEL:layout(win_w, win_h)
 		local gap = 8
 		self._view_h = math.max(0, status_y - self._view_top - gap)
 		self._max_scroll = math.max(0, content_h - self._view_h)
-		self.scroll = math.max(0, math.min(self.scroll, self._max_scroll))
+		self.scroll = self:_clamp_scroll(self.scroll)
 	end
 	self:apply_scroll()
 end
@@ -908,7 +915,7 @@ function PANEL:_do_save_profile(name)
 		self.status:set_text("Saved: " .. name)
 		self:update_profiles()
 	else
-		self.status:set_text("Error: " .. tostring(err))
+		self:_error(err)
 	end
 end
 
@@ -921,7 +928,7 @@ function PANEL:on_load_profile()
 
 	local data, err = profiles.load_profile(name)
 	if not data then
-		self.status:set_text("Error: " .. tostring(err))
+		self:_error(err)
 		return
 	end
 
