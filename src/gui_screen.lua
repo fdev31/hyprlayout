@@ -1,5 +1,4 @@
 local Widget = require("widgets.widget")
-local Rect = require("core.rect")
 
 local ANIMATION_LENGTH = 8
 local SCREEN_BORDER = 2

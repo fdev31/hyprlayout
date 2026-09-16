@@ -27,7 +27,6 @@ local anchor_data = {}
 local shot_thread = nil
 local shot_channel = nil
 local shot_timer = 0
-local shot_images = {}
 local help_visible = false
 local gui_initialized = false
 
@@ -133,7 +132,6 @@ end
 
 local function load_screens()
 	gui_screens = {}
-	shot_images = {}
 	local ok = screens.load()
 
 	if not ok or #screens.displayInfo == 0 then
@@ -297,7 +295,6 @@ local function poll_screenshots()
 						local id = love.image.newImageData(w, h)
 						ffi.copy(id:getPointer(), bytes, w * h * 4)
 						local img = love.graphics.newImage(id)
-						shot_images[msg.uid] = img
 						for _, gs in ipairs(gui_screens) do
 							if gs.screen.uid == msg.uid then
 								gs:set_preview(img)
@@ -752,7 +749,7 @@ function love.draw()
 		local font = love.graphics.getFont()
 
 		-- Compact "?" button (top-right of the canvas) to open the help overlay
-		local bx, by, bw, bh = help_btn_rect()
+		local bx, by = help_btn_rect()
 		draw_keycap(bx, by, "?", font)
 
 		draw_drag_hint()

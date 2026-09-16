@@ -9,7 +9,7 @@ function M.load()
 		return {}
 	end
 	f:close()
-	local chunk, err = loadfile(SETTINGS_PATH)
+	local chunk = loadfile(SETTINGS_PATH)
 	if not chunk then
 		return {}
 	end

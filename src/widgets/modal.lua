@@ -1,5 +1,3 @@
-local Widget = require("widgets.widget")
-
 local Modal = {}
 Modal.__index = Modal
 
