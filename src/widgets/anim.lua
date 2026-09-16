@@ -57,13 +57,7 @@ function AnimColor:advance()
 	return self.r ~= self.tr or self.g ~= self.tg or self.b ~= self.tb
 end
 
-function AnimColor:snap(r, g, b)
-	self.r, self.g, self.b = r, g, b
-	self.tr, self.tg, self.tb = r, g, b
-end
-
 return {
 	AnimFloat = AnimFloat,
 	AnimColor = AnimColor,
-	SPEED = ANIM_SPEED,
 }
