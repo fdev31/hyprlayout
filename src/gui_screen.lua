@@ -28,7 +28,6 @@ function GuiScreen.new(screen, rect)
 	self.highlighted = false
 	self.cur_border = 2.0
 	self.preview = nil
-	self._pulse = 0
 	self.ui_scale = 1.0
 	self._font = nil
 	return self
@@ -85,7 +84,6 @@ function GuiScreen:update(dt)
 		self:_animation_step()
 	end
 	if self.highlighted then
-		self._pulse = self._pulse + dt
 		if self.cur_border < SCREEN_BORDER_SELECTED then
 			self.cur_border = self.cur_border + dt * 10
 		end
@@ -133,17 +131,6 @@ function GuiScreen:draw()
 		r.height - self.cur_border
 	)
 
-	-- if self.highlighted then
-	--   local pulse = 0.5 + 0.5 * math.sin(self._pulse * 3)
-	--   local inset = 4
-	--   local iw = r.width - inset * 2
-	--   local ih = r.height - inset * 2
-	--   if iw > 0 and ih > 0 then
-	--     love.graphics.setColor(1, 0.85, 0, 0.4 + pulse * 0.4)
-	--     love.graphics.setLineWidth(2 + pulse * 3)
-	--     love.graphics.rectangle("line", r.x + inset, r.y + inset, iw, ih)
-	--   end
-	-- end
 	love.graphics.setLineWidth(1)
 
 	local s = self.ui_scale
