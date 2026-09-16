@@ -5,6 +5,7 @@ local anchors = require("core.anchors")
 local GuiScreen = require("gui_screen")
 local Panel = require("panel")
 local apply = require("core.apply")
+local profile_apply = require("core.profile_apply")
 local settings = require("core.settings")
 local profiles = require("core.profiles")
 local ffi = require("ffi")
@@ -329,34 +330,7 @@ local function headless_apply(data, canvas_scale)
 	for _, entry in ipairs(data.screens or {}) do
 		for _, gs in ipairs(gs_list) do
 			if gs.screen.uid == entry.uid then
-				gs.screen.active = entry.active
-				gs.screen.scale = entry.scale or 1
-				gs.screen.transform = entry.transform or 0
-				gs.screen.hdr_enabled = entry.hdr_enabled or false
-				gs.screen.cm = entry.cm or "auto"
-				gs.screen.sdrbrightness = entry.sdrbrightness or 1.0
-				gs.screen.sdrsaturation = entry.sdrsaturation or 1.0
-				gs.screen.sdr_eotf = entry.sdr_eotf or "default"
-				if entry.mode then
-					gs.screen.mode = {
-						width = entry.mode.width,
-						height = entry.mode.height,
-						freq = entry.mode.freq,
-					}
-					local new_w, new_h = Rect.screen_size(
-						gs.screen.mode.width,
-						gs.screen.mode.height,
-						gs.screen.scale,
-						canvas_scale,
-						gs.screen.transform
-					)
-					gs.target_rect.width = new_w
-					gs.target_rect.height = new_h
-				end
-				if entry.position then
-					gs.target_rect.x = entry.position.x / canvas_scale
-					gs.target_rect.y = entry.position.y / canvas_scale
-				end
+				profile_apply.apply_screen_entry(gs, entry, canvas_scale, { match_modes = true })
 			end
 		end
 	end
