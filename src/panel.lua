@@ -6,7 +6,6 @@ local Slider = require("widgets.slider")
 local Modal = require("widgets.modal")
 local profiles = require("core.profiles")
 local profile_apply = require("core.profile_apply")
-local Rect = require("core.rect")
 
 local PANEL = {}
 PANEL.__index = PANEL
@@ -705,18 +704,14 @@ function PANEL:on_resolution_change()
 		return
 	end
 	local screen = gs.screen
-	local old_w, old_h = gs.target_rect.width, gs.target_rect.height
 	screen.mode = { width = opt.value.w, height = opt.value.h, freq = screen.mode and screen.mode.freq or 60 }
-	local new_w, new_h =
-		Rect.screen_size(opt.value.w, opt.value.h, screen.scale, self.screen_scale.value, screen.transform)
-	gs.target_rect.width = new_w
-	gs.target_rect.height = new_h
+	local old_w, old_h = gs:resize_to_mode(self.screen_scale.value)
 	self:update_frequencies()
 	local freq_opt = self.frequencies:get_selected()
 	if freq_opt and freq_opt.value then
 		screen.mode.freq = freq_opt.value
 	end
-	if self.on_screen_resized then
+	if old_w and self.on_screen_resized then
 		self.on_screen_resized(gs, old_w, old_h)
 	end
 end
@@ -746,20 +741,9 @@ function PANEL:on_scale_change()
 	end
 	local screen = gs.screen
 	screen.scale = opt.value
-	if screen.mode then
-		local old_w, old_h = gs.target_rect.width, gs.target_rect.height
-		local new_w, new_h = Rect.screen_size(
-			screen.mode.width,
-			screen.mode.height,
-			screen.scale,
-			self.screen_scale.value,
-			screen.transform
-		)
-		gs.target_rect.width = new_w
-		gs.target_rect.height = new_h
-		if self.on_screen_resized then
-			self.on_screen_resized(gs, old_w, old_h)
-		end
+	local old_w, old_h = gs:resize_to_mode(self.screen_scale.value)
+	if old_w and self.on_screen_resized then
+		self.on_screen_resized(gs, old_w, old_h)
 	end
 end
 
@@ -774,20 +758,9 @@ function PANEL:on_rotation_change()
 	end
 	local screen = gs.screen
 	screen.transform = opt.value
-	if screen.mode then
-		local old_w, old_h = gs.target_rect.width, gs.target_rect.height
-		local new_w, new_h = Rect.screen_size(
-			screen.mode.width,
-			screen.mode.height,
-			screen.scale,
-			self.screen_scale.value,
-			screen.transform
-		)
-		gs.target_rect.width = new_w
-		gs.target_rect.height = new_h
-		if self.on_screen_resized then
-			self.on_screen_resized(gs, old_w, old_h)
-		end
+	local old_w, old_h = gs:resize_to_mode(self.screen_scale.value)
+	if old_w and self.on_screen_resized then
+		self.on_screen_resized(gs, old_w, old_h)
 	end
 end
 
