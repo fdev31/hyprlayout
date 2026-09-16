@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0.0
+Name=Hyprlayout
+Comment=Monitor setup
+Exec=love path/to/hyprlayout/src
+Icon=video-display
+Terminal=false
+Type=Application
+Categories=Utility;Application;
