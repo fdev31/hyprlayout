@@ -152,7 +152,7 @@ local function load_screens()
     end
     local rect = Rect.new(
       math.floor(x / SCREEN_SCALE),
-      -math.floor(y / SCREEN_SCALE) - h,
+      math.floor(y / SCREEN_SCALE),
       w, h
     )
     local gs = GuiScreen.new(screen, rect)
@@ -325,7 +325,7 @@ local function headless_apply(data, canvas_scale)
     end
     local rect = Rect.new(
       math.floor(x / canvas_scale),
-      -math.floor(y / canvas_scale) - h,
+      math.floor(y / canvas_scale),
       w, h
     )
     table.insert(gs_list, GuiScreen.new(screen, rect))
