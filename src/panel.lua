@@ -171,6 +171,10 @@ function PANEL:layout(win_w, win_h)
 	local y = self.y + margin
 	local cw = self.w - 2 * margin
 
+	local function row_label(px, py, text)
+		return Label.new(px, py, text, { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+	end
+
 	self.widgets = {}
 	self.screen_widgets = {}
 
@@ -201,7 +205,7 @@ function PANEL:layout(win_w, win_h)
 
 	-- Canvas
 	self.ss_label =
-		Label.new(x, y, "Canvas", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+		row_label(x, y, "Canvas")
 	local ss_val = self.screen_scale and self.screen_scale.value or PANEL.DEFAULT_CANVAS_SCALE
 	self.screen_scale = Slider.new(x + label_w, y, cw - label_w, row_h, {
 		min = 2,
@@ -220,7 +224,7 @@ function PANEL:layout(win_w, win_h)
 
 	-- UI Scale
 	self.ui_label =
-		Label.new(x, y, "UI Scale", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+		row_label(x, y, "UI Scale")
 	self.ui_scale = Slider.new(x + label_w, y, cw - label_w, row_h, {
 		min = 0.5,
 		max = 2.0,
@@ -235,7 +239,7 @@ function PANEL:layout(win_w, win_h)
 
 	-- Attraction
 	self.attract_label =
-		Label.new(x, y, "Attraction", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+		row_label(x, y, "Attraction")
 	self.attract = Toggle.new(x + label_w, y, math.floor(50 * ui_scale), math.floor(20 * ui_scale), {
 		value = self.attract_enabled ~= false,
 		on_toggle = function(val)
@@ -246,7 +250,7 @@ function PANEL:layout(win_w, win_h)
 
 	-- Screenshot / refresh interval
 	self.shot_interval_label =
-		Label.new(x, y, "Interval", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+		row_label(x, y, "Interval")
 	self.shot_interval = Slider.new(x + label_w, y, cw - label_w, row_h, {
 		min = 0.5,
 		max = 10,
@@ -337,7 +341,7 @@ function PANEL:layout(win_w, win_h)
 
 		-- Power (preserve instance across re-layouts so the knob keeps animating)
 		self.power_label =
-			Label.new(x, y, "Enabled", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+			row_label(x, y, "Enabled")
 		local power_active = self.selected_gs and self.selected_gs.screen.active or true
 		if self.power then
 			self.power.rect.x = x + label_w
@@ -357,7 +361,7 @@ function PANEL:layout(win_w, win_h)
 
 		-- Resolution
 		self.res_label =
-			Label.new(x, y, "Resolution", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+			row_label(x, y, "Resolution")
 		self.resolutions = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
 			font_size = dd_font,
 			options = {},
@@ -369,7 +373,7 @@ function PANEL:layout(win_w, win_h)
 
 		-- Frequency
 		self.freq_label =
-			Label.new(x, y, "Refresh", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+			row_label(x, y, "Refresh")
 		self.frequencies = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
 			font_size = dd_font,
 			options = {},
@@ -381,7 +385,7 @@ function PANEL:layout(win_w, win_h)
 
 		-- Scale
 		self.scale_label =
-			Label.new(x, y, "Scale", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+			row_label(x, y, "Scale")
 		self.scale = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
 			font_size = dd_font,
 			options = {
@@ -400,7 +404,7 @@ function PANEL:layout(win_w, win_h)
 
 		-- Rotation
 		self.rot_label =
-			Label.new(x, y, "Rotation", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+			row_label(x, y, "Rotation")
 		self.rotation = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
 			font_size = dd_font,
 			options = {
@@ -420,7 +424,7 @@ function PANEL:layout(win_w, win_h)
 		-- HDR (master toggle: enables 10 bit + color management + SDR options)
 		-- Preserve instance across re-layouts so the knob keeps animating.
 		self.hdr_label =
-			Label.new(x, y, "HDR", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+			row_label(x, y, "HDR")
 		local hdr_init = self.selected_gs and self.selected_gs.screen.hdr_enabled or false
 		if self.hdr then
 			self.hdr.rect.x = x + label_w
@@ -443,7 +447,7 @@ function PANEL:layout(win_w, win_h)
 		self._hdr_sub_visible = hdr_on
 		if hdr_on then
 			self.cm_label =
-				Label.new(x, y, "CM", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+				row_label(x, y, "CM")
 			self.cm = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
 				font_size = dd_font,
 				options = CM_OPTIONS,
@@ -472,7 +476,7 @@ function PANEL:layout(win_w, win_h)
 			y = y + row_h + 5
 
 			self.sdrs_label =
-				Label.new(x, y, "SDR Sat", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+				row_label(x, y, "SDR Sat")
 			self.sdrsaturation = Slider.new(x + label_w, y, cw - label_w, row_h, {
 				min = 0.0,
 				max = 3.0,
@@ -486,7 +490,7 @@ function PANEL:layout(win_w, win_h)
 			y = y + row_h + 5
 
 			self.sdr_eotf_label =
-				Label.new(x, y, "SDR EOTF", { width = label_w, height = row_h, font_size = math.floor(14 * ui_scale) })
+				row_label(x, y, "SDR EOTF")
 			self.sdr_eotf = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
 				font_size = dd_font,
 				options = SDR_EOTF_OPTIONS,
@@ -754,12 +758,16 @@ function PANEL:on_rotation_change()
 	self:_apply_scalar_change(self.rotation, "transform")
 end
 
-function PANEL:on_power_toggle(val)
+function PANEL:_set_screen_field(field, val)
 	local gs = self.selected_gs
 	if not gs then
 		return
 	end
-	gs.screen.active = val
+	gs.screen[field] = val
+end
+
+function PANEL:on_power_toggle(val)
+	self:_set_screen_field("active", val)
 end
 
 function PANEL:on_hdr_toggle(val)
@@ -785,19 +793,11 @@ function PANEL:on_cm_change()
 end
 
 function PANEL:on_sdrbrightness_change(val)
-	local gs = self.selected_gs
-	if not gs then
-		return
-	end
-	gs.screen.sdrbrightness = val
+	self:_set_screen_field("sdrbrightness", val)
 end
 
 function PANEL:on_sdrsaturation_change(val)
-	local gs = self.selected_gs
-	if not gs then
-		return
-	end
-	gs.screen.sdrsaturation = val
+	self:_set_screen_field("sdrsaturation", val)
 end
 
 function PANEL:on_sdr_eotf_change()
@@ -850,17 +850,23 @@ function PANEL:on_save_profile()
 
 	local name = self.profiles_dd:get_selected_name()
 	if name == "" or name == "(no profiles)" then
-		if not self._modal then
-			local win_w = love.graphics.getWidth()
-			local win_h = love.graphics.getHeight()
-			self._modal = Modal.new(win_w, win_h, "Save Profile", "Profile name", function(text)
-				self:_do_save_profile(text)
-			end, function() end)
-		end
-		self._modal:show()
+		local m = self:_ensure_modal()
+		m.title = "Save Profile"
+		m:show()
 		return
 	end
 	self:_do_save_profile(name)
+end
+
+function PANEL:_ensure_modal()
+	if not self._modal then
+		local win_w = love.graphics.getWidth()
+		local win_h = love.graphics.getHeight()
+		self._modal = Modal.new(win_w, win_h, "", "Profile name", function(text)
+			self:_do_save_profile(text)
+		end, function() end)
+	end
+	return self._modal
 end
 
 function PANEL:_do_save_profile(name)
@@ -948,14 +954,9 @@ function PANEL:on_load_profile()
 end
 
 function PANEL:on_new_profile()
-	if not self._modal then
-		local win_w = love.graphics.getWidth()
-		local win_h = love.graphics.getHeight()
-		self._modal = Modal.new(win_w, win_h, "New Profile Name", "Profile name", function(text)
-			self:_do_save_profile(text)
-		end, function() end)
-	end
-	self._modal:show()
+	local m = self:_ensure_modal()
+	m.title = "New Profile Name"
+	m:show()
 end
 
 function PANEL:on_delete_profile()
