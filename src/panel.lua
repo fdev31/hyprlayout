@@ -5,6 +5,7 @@ local Toggle = require("widgets.toggle")
 local Slider = require("widgets.slider")
 local Modal = require("widgets.modal")
 local profiles = require("core.profiles")
+local profile_apply = require("core.profile_apply")
 local Rect = require("core.rect")
 
 local PANEL = {}
@@ -47,26 +48,6 @@ local function sorted_frequencies(available, w, h)
 		return a > b
 	end)
 	return freqs
-end
-
-local function find_matching_mode(available, w, h, freq)
-	for _, m in ipairs(available) do
-		if m.width == w and m.height == h and math.abs(m.freq - freq) < 0.1 then
-			return m
-		end
-	end
-	local best = nil
-	local best_diff = math.huge
-	for _, m in ipairs(available) do
-		if m.width == w and m.height == h then
-			local diff = math.abs(m.freq - freq)
-			if diff < best_diff then
-				best_diff = diff
-				best = m
-			end
-		end
-	end
-	return best
 end
 
 local function get_closest_match(values, target)
@@ -980,45 +961,16 @@ function PANEL:on_load_profile()
 		return
 	end
 
+	local scale = self.screen_scale.value or PANEL.DEFAULT_CANVAS_SCALE
 	for _, saved in ipairs(data.screens or {}) do
 		for _, gs in ipairs(gs_list) do
 			if gs.screen.uid == saved.uid then
-				gs.screen.active = saved.active
-				gs.screen.scale = saved.scale or 1
-				gs.screen.transform = saved.transform or 0
-				gs.screen.hdr_enabled = saved.hdr_enabled or false
-				gs.screen.cm = saved.cm or "auto"
-				gs.screen.sdrbrightness = saved.sdrbrightness or 1.0
-				gs.screen.sdrsaturation = saved.sdrsaturation or 1.0
-				gs.screen.sdr_eotf = saved.sdr_eotf or "default"
-				if saved.mode then
-					local mode =
-						find_matching_mode(gs.screen.available, saved.mode.width, saved.mode.height, saved.mode.freq)
-					if mode then
-						gs.screen.mode = mode
-					else
-						gs.screen.mode = {
-							width = saved.mode.width,
-							height = saved.mode.height,
-							freq = saved.mode.freq,
-						}
-						self.status:set_text("No matching mode for " .. gs.screen.uid)
-					end
-					local new_w, new_h = Rect.screen_size(
-						gs.screen.mode.width,
-						gs.screen.mode.height,
-						gs.screen.scale,
-						self.screen_scale.value,
-						gs.screen.transform
-					)
-					gs.target_rect.width = new_w
-					gs.target_rect.height = new_h
-				end
-				if saved.position then
-					local sc = self.screen_scale.value or PANEL.DEFAULT_CANVAS_SCALE
-					gs.target_rect.x = saved.position.x / sc
-					gs.target_rect.y = saved.position.y / sc
-				end
+				profile_apply.apply_screen_entry(gs, saved, scale, {
+					match_modes = true,
+					on_no_mode = function(uid)
+						self.status:set_text("No matching mode for " .. uid)
+					end,
+				})
 			end
 		end
 	end
