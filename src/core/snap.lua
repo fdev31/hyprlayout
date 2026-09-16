@@ -64,6 +64,15 @@ local function find_active_index(gui_screens, active)
 	return #gui_screens
 end
 
+-- The active screen is the last one in the list.
+local function get_active(gui_screens)
+	local active = gui_screens[#gui_screens]
+	if not active then
+		return nil
+	end
+	return active, active.target_rect
+end
+
 function M.snap_to_best_non_overlapping(active, candidates, gui_screens, max_dist)
 	local ar = active.target_rect
 	local active_idx = find_active_index(gui_screens, active)
@@ -142,11 +151,10 @@ function M.snap_to_best_non_overlapping(active, candidates, gui_screens, max_dis
 end
 
 function M.snap_active_screen(gui_screens)
-	local active = gui_screens[#gui_screens]
+	local active, ar = get_active(gui_screens)
 	if not active then
 		return
 	end
-	local ar = active.target_rect
 
 	local colliding = {}
 	for i = 1, #gui_screens - 1 do
@@ -162,11 +170,10 @@ function M.snap_active_screen(gui_screens)
 end
 
 function M.attract_screens(gui_screens)
-	local active = gui_screens[#gui_screens]
+	local active, ar = get_active(gui_screens)
 	if not active then
 		return
 	end
-	local ar = active.target_rect
 
 	-- If screens already overlap, don't interfere
 	for i = 1, #gui_screens - 1 do
