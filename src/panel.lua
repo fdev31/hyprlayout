@@ -1158,10 +1158,6 @@ function PANEL:modal_keypressed(key)
 	return false
 end
 
-function PANEL:modal_visible()
-	return self._modal and self._modal:is_visible()
-end
-
 function PANEL:on_press(mx, my)
 	if not self.visible then
 		return false
