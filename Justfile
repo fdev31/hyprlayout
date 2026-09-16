@@ -43,6 +43,12 @@ love:
     cd src && zip -r -q ../dist/hyprlayout.love conf.lua main.lua panel.lua gui_screen.lua dkjson.lua core widgets
     @echo "Built dist/hyprlayout.love ($(du -h dist/hyprlayout.love | cut -f1))"
 
+install:
+    ./install.sh
+
+uninstall:
+    ./uninstall.sh
+
 # Build, then run the self-contained executable.
 run:
     @just build
