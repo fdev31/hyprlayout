@@ -174,7 +174,22 @@ function GuiScreen:draw()
 		end
 	end
 
-	draw_centered(self.screen.name, ty - math.floor(10 * s))
+	local function draw_left(text, y, font, bold)
+		font = font or self._font
+		love.graphics.setFont(font)
+		local x = r.x + 5
+		love.graphics.print(text, x, y)
+		if bold then
+			love.graphics.print(text, x + 1, y)
+		end
+	end
+
+	local name_fits_on_screen = self._font:getWidth(self.screen.name) < r.width - 10
+	if name_fits_on_screen then
+		draw_centered(self.screen.name, ty - math.floor(10 * s))
+	else
+		draw_left(self.screen.name, ty - math.floor(10 * s))
+	end
 
 	if self.screen.active and self.screen.mode then
 		local label = string.format(
