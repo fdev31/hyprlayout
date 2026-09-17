@@ -5,6 +5,6 @@ mkdir -p ~/.local/bin/
 FNAME="$HOME/.local/bin/hyprlayout"
 cat >${FNAME} <<EOF
 #!/bin/sh
-love $PWD/src
+love $PWD/src \$*
 EOF
 chmod +x "${FNAME}"
