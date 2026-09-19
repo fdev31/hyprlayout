@@ -460,6 +460,16 @@ function PANEL:layout(win_w, win_h)
 		end)
 		y = y + row_h + 5
 
+		-- Live HDR format indicator
+		self.hdr_status_label =
+			row_label(x, y, "Format")
+		self.hdr_status = Label.new(x + label_w, y, "", {
+			width = cw - label_w,
+			height = row_h,
+			font_size = math.floor(13 * ui_scale),
+		})
+		y = y + row_h + 5
+
 		-- HDR sub-options (only shown when HDR is enabled)
 		local hdr_on = self.selected_gs and self.selected_gs.screen.hdr_enabled
 		self._hdr_sub_visible = hdr_on
@@ -552,6 +562,8 @@ function PANEL:layout(win_w, win_h)
 			track(self.sdrs_label)
 			track(self.sdr_eotf_label)
 		end
+		track(self.hdr_status_label)
+		track(self.hdr_status)
 	end
 
 	local status_h = 20
@@ -644,6 +656,7 @@ function PANEL:set_screen(gs, scale_factor)
 		self.sdrsaturation.value = screen.sdrsaturation or 1.0
 		self.sdr_eotf.selected_index = find_option_index(SDR_EOTF_OPTIONS, screen.sdr_eotf or "default")
 	end
+	self.hdr_status:set_text(screen.current_format or "XRGB8888")
 end
 
 function PANEL:update_frequencies()
@@ -1011,6 +1024,8 @@ function PANEL:draw()
 		self.scale_label:draw()
 		self.rot_label:draw()
 		self.hdr_label:draw()
+		self.hdr_status_label:draw()
+		self.hdr_status:draw()
 		if self.selected_gs and self.selected_gs.screen.hdr_enabled then
 			self.cm_label:draw()
 			self.sdrb_label:draw()

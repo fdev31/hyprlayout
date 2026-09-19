@@ -25,10 +25,14 @@ function Screen.new(opts)
 		available = opts.available or {},
 		transform = opts.transform or 0,
 		hdr_enabled = opts.hdr_enabled or false,
+		current_format = opts.current_format or "XRGB8888",
+		cm_preset = opts.cm_preset or "srgb",
 		cm = opts.cm or "auto",
 		sdrbrightness = opts.sdrbrightness or 1.0,
 		sdrsaturation = opts.sdrsaturation or 1.0,
 		sdr_eotf = opts.sdr_eotf or "default",
+		sdr_max_luminance = opts.sdr_max_luminance or 80,
+		sdr_min_luminance = opts.sdr_min_luminance or 0.2,
 	}, Screen)
 end
 
@@ -92,6 +96,11 @@ function M.load()
 
 		local active = not monitor.disabled
 
+		local current_format = monitor.currentFormat or "XRGB8888"
+		local cm_preset = monitor.colorManagementPreset or "srgb"
+		local is_hdr = current_format == "XR30"
+			or current_format == "XB30"
+			or cm_preset == "hdr"
 		local screen = Screen.new({
 			uid = monitor.name,
 			name = monitor.description or monitor.name,
@@ -101,6 +110,14 @@ function M.load()
 			available = available,
 			mode = cur_mode,
 			transform = monitor.transform or 0,
+			hdr_enabled = is_hdr,
+			current_format = current_format,
+			cm_preset = cm_preset,
+			cm = cm_preset,
+			sdrbrightness = monitor.sdrBrightness or 1.0,
+			sdrsaturation = monitor.sdrSaturation or 1.0,
+			sdr_max_luminance = monitor.sdrMaxLuminance or 80,
+			sdr_min_luminance = monitor.sdrMinLuminance or 0.2,
 		})
 		table.insert(M.displayInfo, screen)
 	end

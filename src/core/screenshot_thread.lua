@@ -35,9 +35,14 @@ elseif os.execute("which ffmpeg > /dev/null 2>&1") then
 	end
 end
 
+local HDR_FORMATS = { XR30 = true, XB30 = true }
+
 if has_grim and to_rgba then
 	for _, s in ipairs(screens) do
-		if s.active and s.tw and s.tw > 0 and s.th > 0 then
+		local valid = s.active and s.tw and s.tw > 0 and s.th > 0
+		if valid and HDR_FORMATS[s.currentFormat] then
+			print("[shot-thread] skipping HDR monitor " .. s.uid .. " (grim hangs on 10-bit)")
+		elseif valid then
 			local safe_uid = (s.uid:gsub("/", "_"):gsub(" ", "_"))
 			local png = shot_dir .. "/.tmp_" .. safe_uid .. ".png"
 			local rgba = "shot_" .. safe_uid .. ".rgba"

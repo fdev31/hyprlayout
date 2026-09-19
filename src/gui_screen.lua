@@ -209,6 +209,19 @@ function GuiScreen:draw()
 		draw_centered(self.screen.uid, ty + math.floor(5 * s), self._font_port, true)
 	end
 
+	if self.screen.hdr_enabled then
+		local hdr_text = "HDR"
+		local hdr_font = self._font_port or self._font
+		love.graphics.setFont(hdr_font)
+		local hdr_w = hdr_font:getWidth(hdr_text)
+		local hdr_x = r.x + r.width - hdr_w - 6
+		local hdr_y = r.y + 4
+		love.graphics.setColor(0.9, 0.35, 0.15)
+		love.graphics.rectangle("fill", hdr_x, hdr_y, hdr_w + 6, hdr_font:getHeight() + 4, 3, 3)
+		love.graphics.setColor(0.94, 0.94, 0.94)
+		love.graphics.print(hdr_text, hdr_x + 3, hdr_y + 2)
+	end
+
 	love.graphics.setScissor()
 end
 
