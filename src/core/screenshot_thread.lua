@@ -46,7 +46,7 @@ if has_grim and to_rgba then
 			local safe_uid = (s.uid:gsub("/", "_"):gsub(" ", "_"))
 			local png = shot_dir .. "/.tmp_" .. safe_uid .. ".png"
 			local rgba = "shot_" .. safe_uid .. ".rgba"
-			if os.execute(string.format('grim -o "%s" "%s" 2>/dev/null', s.uid, png)) then
+			if os.execute(string.format('timeout 5 grim -o "%s" "%s" 2>/dev/null', s.uid, png)) then
 				if to_rgba(png, shot_dir .. "/" .. rgba, s.tw, s.th) then
 					channel:push({ type = "screenshot", uid = s.uid, file = rgba, w = s.tw, h = s.th })
 				end
