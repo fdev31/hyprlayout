@@ -257,7 +257,13 @@ local function start_screenshot_thread()
 			-- Decode at the size the preview is actually displayed at (the UI canvas scale)
 			tw, th = Rect.screen_size(scr.mode.width, scr.mode.height, scr.scale, SCREEN_SCALE, scr.transform)
 		end
-		table.insert(info, { uid = scr.uid, active = scr.active, tw = tw, th = th })
+		table.insert(info, {
+			uid = scr.uid,
+			active = scr.active,
+			tw = tw,
+			th = th,
+			currentFormat = scr.current_format,
+		})
 	end
 	shot_thread = love.thread.newThread("core/screenshot_thread.lua")
 	shot_thread:start(info, shot_dir)

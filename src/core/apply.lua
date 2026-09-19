@@ -45,7 +45,7 @@ function M.make_commands(gui_screens, canvas_scale)
 			end
 			local pos = string.format("%dx%d", math.floor(r.x), math.floor(r.y))
 			local cmd = string.format(
-				"hl.monitor({output='%s', mode='%s', position='%s', scale=%.6f, transform=%d",
+				"hl.monitor({output='%s', disabled=false, mode='%s', position='%s', scale=%.6f, transform=%d",
 				screen.uid,
 				mode_str,
 				pos,
