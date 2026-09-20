@@ -131,6 +131,18 @@ function PANEL:hovered(mx, my)
 	return self.visible and mx >= self.x and mx <= self.x + self.w and my >= self.y and my <= self.y + self.h
 end
 
+-- Returns true if the mouse is over the options of an open dropdown.
+-- The options can extend outside the panel bounds (cropped at the screen edge),
+-- so this is checked in addition to PANEL:hovered for scrolling.
+function PANEL:_over_open_dropdown(mx, my)
+	for _, w in ipairs(self.widgets) do
+		if w.is_open and w:is_open() and w.hit_options and w:hit_options(mx, my) then
+			return true
+		end
+	end
+	return false
+end
+
 -- Handle a vertical wheel event while hovering the panel.
 -- Returns true if the event was consumed by the panel.
 function PANEL:_clamp_scroll(v)
@@ -146,7 +158,7 @@ function PANEL:handle_scroll(dy)
 		return false
 	end
 	local mx, my = love.mouse.getX(), love.mouse.getY()
-	if not self:hovered(mx, my) then
+	if not (self:hovered(mx, my) or self:_over_open_dropdown(mx, my)) then
 		return false
 	end
 	if self._max_scroll <= 0 then
@@ -1007,6 +1019,7 @@ function PANEL:draw()
 	self.title:draw()
 	-- draw a line above title
 	love.graphics.setColor(0.3, 0.3, 0.4)
+	self.ss_label:draw()
 	self.ui_label:draw()
 	self.attract_label:draw()
 	self.shot_interval_label:draw()

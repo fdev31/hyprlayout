@@ -20,6 +20,7 @@ function Dropdown.new(x, y, w, h, opts)
 	self._font = love.graphics.newFont(self.font_size)
 	self.radius = opts.radius or 4
 	self._open = false
+	self._open_down = true
 	self._hover = false
 	self._hover_option = -1
 	self._pressed = false
@@ -53,14 +54,37 @@ function Dropdown:is_open()
 	return self._open
 end
 
+-- Decide (once, when opening) whether the list opens below or above the box.
+-- Opens upward when the full list would overflow the bottom of the window and
+-- there is at least as much room above the box as below it.
+function Dropdown:_should_open_down()
+	local r = self.rect
+	local total_h = #self.options * r.height
+	local win_h = love.graphics.getHeight()
+	if r.y + r.height + total_h <= win_h then
+		return true
+	end
+	return win_h - (r.y + r.height) >= r.y
+end
+
+-- Top y of option i (1-based), for the current open direction.
+function Dropdown:_option_y(i)
+	local r = self.rect
+	if self._open_down then
+		return r.y + i * r.height
+	end
+	return r.y - i * r.height
+end
+
 function Dropdown:hit_options(mx, my)
 	if not self._open then
 		return nil
 	end
-	local opt_h = self.rect.height
+	local r = self.rect
+	local opt_h = r.height
 	for i = 1, #self.options do
-		local oy = self.rect.y + i * opt_h
-		if mx >= self.rect.x and mx <= self.rect.x + self.rect.width and my >= oy and my <= oy + opt_h then
+		local oy = self:_option_y(i)
+		if mx >= r.x and mx <= r.x + r.width and my >= oy and my <= oy + opt_h then
 			return i
 		end
 	end
@@ -81,6 +105,7 @@ function Dropdown:on_press(mx, my)
 	else
 		if self:hit(mx, my) then
 			self._open = true
+			self._open_down = self:_should_open_down()
 			self._pressed = true
 			return true
 		end
@@ -145,11 +170,12 @@ function Dropdown:draw_overlay()
 	local opt_h = r.height
 	local total_h = #self.options * opt_h
 	local visible_h = total_h * exp
+	local scissor_y = self._open_down and r.y + r.height or r.y - visible_h
 
-	love.graphics.setScissor(r.x, r.y + r.height, r.width, visible_h)
+	love.graphics.setScissor(r.x, scissor_y, r.width, visible_h)
 
 	for i = 1, #self.options do
-		local oy = r.y + i * opt_h
+		local oy = self:_option_y(i)
 		local opt = self.options[i]
 		local name = opt.name or tostring(opt)
 
