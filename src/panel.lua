@@ -889,6 +889,7 @@ function PANEL:_do_save_profile(name)
 		local screen = gs.screen
 		table.insert(data.screens, {
 			uid = screen.uid,
+			monitor_name = screen.name,
 			active = screen.active,
 			mode = screen.mode and {
 				width = screen.mode.width,
@@ -938,14 +939,32 @@ function PANEL:on_load_profile()
 
 	local scale = self.screen_scale.value or PANEL.DEFAULT_CANVAS_SCALE
 	for _, saved in ipairs(data.screens or {}) do
-		for _, gs in ipairs(gs_list) do
-			if gs.screen.uid == saved.uid then
-				profile_apply.apply_screen_entry(gs, saved, scale, {
-					match_modes = true,
-					on_no_mode = function(uid)
-						self.status:set_text("No matching mode for " .. uid)
-					end,
-				})
+		local matched = false
+		if saved.monitor_name then
+			for _, gs in ipairs(gs_list) do
+				if gs.screen.name == saved.monitor_name then
+					profile_apply.apply_screen_entry(gs, saved, scale, {
+						match_modes = true,
+						on_no_mode = function(uid)
+							self.status:set_text("No matching mode for " .. uid)
+						end,
+					})
+					matched = true
+					break
+				end
+			end
+		end
+		if not matched then
+			for _, gs in ipairs(gs_list) do
+				if gs.screen.uid == saved.uid then
+					profile_apply.apply_screen_entry(gs, saved, scale, {
+						match_modes = true,
+						on_no_mode = function(uid)
+							self.status:set_text("No matching mode for " .. uid)
+						end,
+					})
+					break
+				end
 			end
 		end
 	end

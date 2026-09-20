@@ -343,9 +343,22 @@ local function headless_apply(data, canvas_scale)
 	local gs_list = build_gui_screens(screens.displayInfo, canvas_scale)
 
 	for _, entry in ipairs(data.screens or {}) do
-		for _, gs in ipairs(gs_list) do
-			if gs.screen.uid == entry.uid then
-				profile_apply.apply_screen_entry(gs, entry, canvas_scale, { match_modes = true })
+		local matched = false
+		if entry.monitor_name then
+			for _, gs in ipairs(gs_list) do
+				if gs.screen.name == entry.monitor_name then
+					profile_apply.apply_screen_entry(gs, entry, canvas_scale, { match_modes = true })
+					matched = true
+					break
+				end
+			end
+		end
+		if not matched then
+			for _, gs in ipairs(gs_list) do
+				if gs.screen.uid == entry.uid then
+					profile_apply.apply_screen_entry(gs, entry, canvas_scale, { match_modes = true })
+					break
+				end
 			end
 		end
 	end
@@ -393,41 +406,65 @@ local function handle_cli()
 
 	if a1 == "-m" then
 		screens.load()
-		local current = {}
+		local current_by_name = {}
+		local current_by_uid = {}
 		for _, s in ipairs(screens.displayInfo) do
 			if s.active then
-				current[s.uid] = true
+				current_by_name[s.name] = true
+				current_by_uid[s.uid] = true
 			end
 		end
+
+		local function sets_equal(a, b)
+			for k in pairs(a) do
+				if not b[k] then return false end
+			end
+			for k in pairs(b) do
+				if not a[k] then return false end
+			end
+			return true
+		end
+
 		local matched_name, matched_data
+
+		-- Pass 1: match by full monitor name
 		for _, name in ipairs(profiles.list_profiles()) do
 			local data = profiles.load_profile(name)
 			if data then
-				local prof = {}
+				local has_names = true
+				local prof_names = {}
 				for _, s in ipairs(data.screens or {}) do
-					prof[s.uid] = true
-				end
-				local equal = true
-				for uid in pairs(current) do
-					if not prof[uid] then
-						equal = false
+					if s.monitor_name then
+						prof_names[s.monitor_name] = true
+					else
+						has_names = false
 						break
 					end
 				end
-				if equal then
-					for uid in pairs(prof) do
-						if not current[uid] then
-							equal = false
-							break
-						end
-					end
-				end
-				if equal then
+				if has_names and sets_equal(current_by_name, prof_names) then
 					matched_name, matched_data = name, data
 					break
 				end
 			end
 		end
+
+		-- Pass 2: match by port/uid (fallback)
+		if not matched_name then
+			for _, name in ipairs(profiles.list_profiles()) do
+				local data = profiles.load_profile(name)
+				if data then
+					local prof = {}
+					for _, s in ipairs(data.screens or {}) do
+						prof[s.uid] = true
+					end
+					if sets_equal(current_by_uid, prof) then
+						matched_name, matched_data = name, data
+						break
+					end
+				end
+			end
+		end
+
 		if matched_name then
 			print("Matched profile " .. matched_name .. ". Applying it...")
 			headless_apply(matched_data, canvas_scale)
