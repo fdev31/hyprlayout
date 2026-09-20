@@ -25,8 +25,10 @@ local panel_w = Panel.PANEL_W
 local confirm_start = 0
 local original_cmd = nil
 local anchor_data = {}
-local shot_thread = nil
+local shot_threads = {}
 local shot_channel = nil
+local shot_grim = false
+local shot_converter = nil
 local shot_timer = 0
 local help_visible = false
 local gui_initialized = false
@@ -249,30 +251,37 @@ local function start_screenshot_thread()
 	if not next(gui_screens) then
 		return
 	end
-	local info = {}
+	if not (shot_grim and shot_converter) then
+		return
+	end
+	-- One capture thread per active screen so all monitors are grabbed in parallel.
+	shot_threads = {}
 	for _, gs in ipairs(gui_screens) do
 		local scr = gs.screen
-		local tw, th
-		if scr.mode then
-			-- Decode at the size the preview is actually displayed at (the UI canvas scale)
-			tw, th = Rect.screen_size(scr.mode.width, scr.mode.height, scr.scale, SCREEN_SCALE, scr.transform)
+		if scr.active then
+			local tw, th
+			if scr.mode then
+				-- Decode at the size the preview is actually displayed at (the UI canvas scale)
+				tw, th = Rect.screen_size(scr.mode.width, scr.mode.height, scr.scale, SCREEN_SCALE, scr.transform)
+			end
+			local info = {
+				uid = scr.uid,
+				active = scr.active,
+				tw = tw,
+				th = th,
+				currentFormat = scr.current_format,
+			}
+			local t = love.thread.newThread("core/screenshot_thread.lua")
+			t:start(info, shot_dir, shot_converter)
+			table.insert(shot_threads, t)
 		end
-		table.insert(info, {
-			uid = scr.uid,
-			active = scr.active,
-			tw = tw,
-			th = th,
-			currentFormat = scr.current_format,
-		})
 	end
-	shot_thread = love.thread.newThread("core/screenshot_thread.lua")
-	shot_thread:start(info, shot_dir)
 end
 
 local function poll_screenshots()
-	if shot_thread then
+	for _, t in pairs(shot_threads) do
 		local ok, err = pcall(function()
-			return shot_thread:getError()
+			return t:getError()
 		end)
 		if ok and err then
 			print("[screenshot thread error] " .. err)
@@ -467,6 +476,18 @@ function love.load()
 	end
 	shot_dir = cache_base .. "/hyprlayout/shots"
 
+	-- Detect capture tools once and pass the result to each capture thread
+	-- (only serializable data crosses the LÖVE thread boundary).
+	shot_grim = os.execute("which grim > /dev/null 2>&1")
+	if os.execute("which convert > /dev/null 2>&1") then
+		shot_converter = "convert"
+	elseif os.execute("which magick > /dev/null 2>&1") then
+		shot_converter = "magick"
+	elseif os.execute("which ffmpeg > /dev/null 2>&1") then
+		shot_converter = "ffmpeg"
+	end
+	os.execute('mkdir -p "' .. shot_dir .. '"')
+
 	local saved = settings.load()
 	if saved.canvas_scale then
 		SCREEN_SCALE = math.max(2, math.min(16, saved.canvas_scale))
@@ -498,8 +519,8 @@ function love.quit()
 	if gui_initialized then
 		save_settings()
 	end
-	if shot_thread then
-		shot_thread:wait()
+	for _, t in pairs(shot_threads) do
+		t:wait()
 	end
 end
 
