@@ -21,6 +21,7 @@ function Dropdown.new(x, y, w, h, opts)
 	self.radius = opts.radius or 4
 	self._open = false
 	self._open_down = true
+	self._list_scroll = 0
 	self._hover = false
 	self._hover_option = -1
 	self._pressed = false
@@ -67,13 +68,43 @@ function Dropdown:_should_open_down()
 	return win_h - (r.y + r.height) >= r.y
 end
 
--- Top y of option i (1-based), for the current open direction.
+-- Available window height in the current open direction.
+function Dropdown:_avail_h()
+	local r = self.rect
+	local win_h = love.graphics.getHeight()
+	if self._open_down then
+		return win_h - (r.y + r.height)
+	end
+	return r.y
+end
+
+-- Clamped internal scroll of the options list (pixels from its start).
+function Dropdown:_clamp_list_scroll()
+	local total_h = #self.options * self.rect.height
+	self._list_scroll = math.max(0, math.min(total_h - math.min(total_h, self:_avail_h()), self._list_scroll))
+end
+
+-- Scroll the options list. Returns true if the event was consumed.
+function Dropdown:on_scroll(dy)
+	if not self._open then
+		return false
+	end
+	local total_h = #self.options * self.rect.height
+	if total_h <= self:_avail_h() then
+		return false
+	end
+	self._list_scroll = math.max(0, math.min(total_h - self:_avail_h(), self._list_scroll - dy * 40))
+	return true
+end
+
+-- Top y of option i (1-based), for the current open direction and list scroll.
 function Dropdown:_option_y(i)
 	local r = self.rect
+	local s = self._list_scroll
 	if self._open_down then
-		return r.y + i * r.height
+		return r.y + i * r.height - s
 	end
-	return r.y - i * r.height
+	return r.y - i * r.height + s
 end
 
 function Dropdown:hit_options(mx, my)
@@ -82,9 +113,11 @@ function Dropdown:hit_options(mx, my)
 	end
 	local r = self.rect
 	local opt_h = r.height
+	local view_h = math.min(#self.options * opt_h, self:_avail_h())
+	local top = self._open_down and r.y + r.height or r.y - view_h
 	for i = 1, #self.options do
 		local oy = self:_option_y(i)
-		if mx >= r.x and mx <= r.x + r.width and my >= oy and my <= oy + opt_h then
+		if mx >= r.x and mx <= r.x + r.width and my >= math.max(oy, top) and my <= math.min(oy + opt_h, top + view_h) then
 			return i
 		end
 	end
@@ -106,6 +139,7 @@ function Dropdown:on_press(mx, my)
 		if self:hit(mx, my) then
 			self._open = true
 			self._open_down = self:_should_open_down()
+			self._list_scroll = 0
 			self._pressed = true
 			return true
 		end
@@ -169,7 +203,9 @@ function Dropdown:draw_overlay()
 	love.graphics.setFont(self._font)
 	local opt_h = r.height
 	local total_h = #self.options * opt_h
-	local visible_h = total_h * exp
+	self:_clamp_list_scroll()
+	local view_h = math.min(total_h, self:_avail_h())
+	local visible_h = view_h * exp
 	local scissor_y = self._open_down and r.y + r.height or r.y - visible_h
 
 	love.graphics.setScissor(r.x, scissor_y, r.width, visible_h)

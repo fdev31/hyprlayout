@@ -158,6 +158,12 @@ function PANEL:handle_scroll(dy)
 		return false
 	end
 	local mx, my = love.mouse.getX(), love.mouse.getY()
+	-- An open dropdown whose list overflows its viewport scrolls itself first.
+	for _, w in ipairs(self.widgets) do
+		if w.is_open and w:is_open() and w.on_scroll and w:hit_options(mx, my) and w:on_scroll(dy) then
+			return true
+		end
+	end
 	if not (self:hovered(mx, my) or self:_over_open_dropdown(mx, my)) then
 		return false
 	end
