@@ -8,6 +8,7 @@ local apply = require("core.apply")
 local profile_apply = require("core.profile_apply")
 local settings = require("core.settings")
 local profiles = require("core.profiles")
+local debug = require("core.debug")
 local ffi = require("ffi")
 
 local SCREEN_SCALE = Panel.DEFAULT_CANVAS_SCALE
@@ -32,6 +33,7 @@ local shot_converter = nil
 local shot_timer = 0
 local help_visible = false
 local gui_initialized = false
+local last_window_sig = nil
 
 local function build_gui_screens(info, scale)
 	local list = {}
@@ -185,7 +187,11 @@ end
 local function action_apply()
 	local cmds = apply.make_commands(gui_screens, SCREEN_SCALE)
 	if #cmds > 0 then
+		debug.log("action_apply: before run_commands (%d cmds)", #cmds)
+		debug.dump_window_state("before apply")
 		apply.run_commands(cmds)
+		debug.log("action_apply: after run_commands")
+		debug.dump_window_state("after apply")
 		confirm_start = os.clock()
 		status_msg = "Layout applied! Press ENTER to confirm or ESC to revert (" .. CONFIRM_DELAY .. "s)"
 		status_timer = CONFIRM_DELAY
@@ -364,7 +370,11 @@ local function headless_apply(data, canvas_scale)
 	end
 
 	local cmds = apply.make_commands(gs_list, canvas_scale)
+	debug.log("headless_apply: before run_commands (%d cmds)", #cmds)
+	debug.dump_window_state("headless before apply")
 	apply.run_commands(cmds)
+	debug.log("headless_apply: after run_commands")
+	debug.dump_window_state("headless after apply")
 end
 
 local function is_path(p)
@@ -389,6 +399,14 @@ local function first_user_arg()
 	return arg[1]
 end
 
+-- The CLI/headless paths do all their work (hyprctl) before exit. LÖVE's normal
+-- shutdown (lua_close) crashes in SDL3's Wayland teardown after a monitor
+-- reconfiguration, so we terminate the process directly instead of love.event.quit().
+local function cli_exit(code)
+	io.stdout:flush()
+	os.exit(code or 0)
+end
+
 local function handle_cli()
 	local a1 = first_user_arg()
 	if not a1 then
@@ -400,7 +418,7 @@ local function handle_cli()
 		for _, name in ipairs(profiles.list_profiles()) do
 			print(" - " .. name)
 		end
-		love.event.quit()
+		cli_exit(0)
 		return true
 	end
 
@@ -471,7 +489,7 @@ local function handle_cli()
 		else
 			print("No matching profile for current display set")
 		end
-		love.event.quit()
+		cli_exit(0)
 		return true
 	end
 
@@ -482,21 +500,22 @@ Options:
          -m : find a profile that matches the currently plugged display set, and apply it.
               No-op if not found; will apply first in alphabetical order if multiple found.
  <profile name> : loads a profile]])
-		love.event.quit()
+		cli_exit(0)
 		return true
 	end
 
 	local data = profiles.load_profile(a1)
 	if not data then
 		print("No such profile: " .. a1)
-	else
-		headless_apply(data, canvas_scale)
+		cli_exit(1)
 	end
-	love.event.quit()
+	headless_apply(data, canvas_scale)
+	cli_exit(0)
 	return true
 end
 
 function love.load()
+	debug.install_sigfpe_handler()
 	if handle_cli() then
 		return
 	end
@@ -553,20 +572,47 @@ function love.load()
 end
 
 function love.quit()
+	debug.log("love.quit reached")
 	if gui_initialized then
 		save_settings()
 	end
 	for _, t in pairs(shot_threads) do
 		t:wait()
 	end
+	-- LÖVE's own shutdown (lua_close) crashes in SDL3's Wayland teardown after a
+	-- monitor reconfiguration, so terminate directly once our cleanup is done.
+	if gui_initialized then
+		io.stdout:flush()
+		os.exit(0)
+	end
 end
 
 function love.resize(w, h)
+	debug.log("resize %dx%d", w, h)
+	debug.dump_window_state("resize")
 	layout_panel()
 	center_layout(true)
 end
 
+local function track_window_state()
+	if not debug.enabled() then
+		return
+	end
+	local ok, sig = pcall(function()
+		local w, h = love.window.getSize()
+		local x, y = love.window.getPosition()
+		local m = love.window.getMonitor()
+		return w .. "x" .. h .. "@" .. x .. "," .. y .. " mon=" .. tostring(m)
+	end)
+	if ok and sig ~= last_window_sig then
+		last_window_sig = sig
+		debug.log("window state changed: %s", sig)
+		debug.dump_window_state("window changed")
+	end
+end
+
 function love.update(dt)
+	track_window_state()
 	for _, gs in ipairs(gui_screens) do
 		gs:update(dt)
 	end

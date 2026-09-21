@@ -1,4 +1,5 @@
 local M = {}
+local debug = require("core.debug")
 
 -- The canvas is y-down (LÖVE), same orientation as Hyprland's top-left
 -- position, so we only normalize to a (0,0) origin — no y-flip.
@@ -79,9 +80,13 @@ end
 function M.run_commands(cmds)
 	for _, cmd in ipairs(cmds) do
 		print("Running: " .. cmd)
+		debug.log("run_commands: executing: %s", cmd)
+		debug.dump_window_state("before hyprctl")
 		local f = io.popen(cmd .. " 2>&1")
 		local out = f:read("*a") or ""
 		f:close()
+		debug.log("run_commands: output: %s", out == "" and "(empty)" or out)
+		debug.dump_window_state("after hyprctl")
 		if out ~= "" then
 			print(out)
 		end
