@@ -67,13 +67,8 @@ function GuiScreen:resize_to_mode(canvas_scale)
 		return
 	end
 	local old_w, old_h = self.target_rect.width, self.target_rect.height
-	local new_w, new_h = Rect.screen_size(
-		screen.mode.width,
-		screen.mode.height,
-		screen.scale,
-		canvas_scale,
-		screen.transform
-	)
+	local new_w, new_h =
+		Rect.screen_size(screen.mode.width, screen.mode.height, screen.scale, canvas_scale, screen.transform)
 	self.target_rect.width = new_w
 	self.target_rect.height = new_h
 	return old_w, old_h

@@ -117,7 +117,12 @@ function Dropdown:hit_options(mx, my)
 	local top = self._open_down and r.y + r.height or r.y - view_h
 	for i = 1, #self.options do
 		local oy = self:_option_y(i)
-		if mx >= r.x and mx <= r.x + r.width and my >= math.max(oy, top) and my <= math.min(oy + opt_h, top + view_h) then
+		if
+			mx >= r.x
+			and mx <= r.x + r.width
+			and my >= math.max(oy, top)
+			and my <= math.min(oy + opt_h, top + view_h)
+		then
 			return i
 		end
 	end

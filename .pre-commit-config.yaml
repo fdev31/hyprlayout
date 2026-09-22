@@ -1,0 +1,8 @@
+repos:
+  - repo: https://github.com/JohnnyMorganz/StyLua
+    rev: v2.5.2
+    hooks:
+      # Uses the system-wide stylua binary (no build/download needed).
+      - id: stylua-system
+        # Vendored third-party decoder; kept as-is (same exclusion as .luacheckrc).
+        exclude: ^src/dkjson\.lua$

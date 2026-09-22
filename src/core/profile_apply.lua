@@ -52,13 +52,8 @@ function M.apply_screen_entry(gs, entry, scale, opts)
 				opts.on_no_mode(gs.screen.uid)
 			end
 		end
-		local new_w, new_h = Rect.screen_size(
-			gs.screen.mode.width,
-			gs.screen.mode.height,
-			gs.screen.scale,
-			scale,
-			gs.screen.transform
-		)
+		local new_w, new_h =
+			Rect.screen_size(gs.screen.mode.width, gs.screen.mode.height, gs.screen.scale, scale, gs.screen.transform)
 		gs.target_rect.width = new_w
 		gs.target_rect.height = new_h
 	end

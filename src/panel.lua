@@ -262,8 +262,7 @@ function PANEL:layout(win_w, win_h)
 	y = y + row_h + 15
 
 	-- Canvas
-	self.ss_label =
-		row_label(x, y, "Canvas")
+	self.ss_label = row_label(x, y, "Canvas")
 	local ss_val = self.screen_scale and self.screen_scale.value or PANEL.DEFAULT_CANVAS_SCALE
 	self.screen_scale = Slider.new(x + label_w, y, cw - label_w, row_h, {
 		min = 2,
@@ -281,8 +280,7 @@ function PANEL:layout(win_w, win_h)
 	y = y + row_h + 5
 
 	-- UI Scale
-	self.ui_label =
-		row_label(x, y, "UI Scale")
+	self.ui_label = row_label(x, y, "UI Scale")
 	self.ui_scale = Slider.new(x + label_w, y, cw - label_w, row_h, {
 		min = 0.5,
 		max = 2.0,
@@ -296,8 +294,7 @@ function PANEL:layout(win_w, win_h)
 	y = y + row_h + 5
 
 	-- Attraction
-	self.attract_label =
-		row_label(x, y, "Attraction")
+	self.attract_label = row_label(x, y, "Attraction")
 	self.attract = Toggle.new(x + label_w, y, math.floor(50 * ui_scale), math.floor(20 * ui_scale), {
 		value = self.attract_enabled ~= false,
 		on_toggle = function(val)
@@ -307,8 +304,7 @@ function PANEL:layout(win_w, win_h)
 	y = y + row_h + 5
 
 	-- Screenshot / refresh interval
-	self.shot_interval_label =
-		row_label(x, y, "Interval")
+	self.shot_interval_label = row_label(x, y, "Interval")
 	self.shot_interval = Slider.new(x + label_w, y, cw - label_w, row_h, {
 		min = 0.5,
 		max = 10,
@@ -398,8 +394,7 @@ function PANEL:layout(win_w, win_h)
 		y = y + row_h + 5
 
 		-- Power (preserve instance across re-layouts so the knob keeps animating)
-		self.power_label =
-			row_label(x, y, "Enabled")
+		self.power_label = row_label(x, y, "Enabled")
 		local power_active = self.selected_gs and self.selected_gs.screen.active or true
 		self.power = ensure_toggle(self.power, power_active, function(val)
 			self:on_power_toggle(val)
@@ -407,8 +402,7 @@ function PANEL:layout(win_w, win_h)
 		y = y + row_h + 5
 
 		-- Resolution
-		self.res_label =
-			row_label(x, y, "Resolution")
+		self.res_label = row_label(x, y, "Resolution")
 		self.resolutions = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
 			font_size = dd_font,
 			options = {},
@@ -419,8 +413,7 @@ function PANEL:layout(win_w, win_h)
 		y = y + row_h + 5
 
 		-- Frequency
-		self.freq_label =
-			row_label(x, y, "Refresh")
+		self.freq_label = row_label(x, y, "Refresh")
 		self.frequencies = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
 			font_size = dd_font,
 			options = {},
@@ -431,8 +424,7 @@ function PANEL:layout(win_w, win_h)
 		y = y + row_h + 5
 
 		-- Scale
-		self.scale_label =
-			row_label(x, y, "Scale")
+		self.scale_label = row_label(x, y, "Scale")
 		self.scale = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
 			font_size = dd_font,
 			options = {
@@ -450,8 +442,7 @@ function PANEL:layout(win_w, win_h)
 		y = y + row_h + 5
 
 		-- Rotation
-		self.rot_label =
-			row_label(x, y, "Rotation")
+		self.rot_label = row_label(x, y, "Rotation")
 		self.rotation = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
 			font_size = dd_font,
 			options = {
@@ -470,8 +461,7 @@ function PANEL:layout(win_w, win_h)
 
 		-- HDR (master toggle: enables 10 bit + color management + SDR options)
 		-- Preserve instance across re-layouts so the knob keeps animating.
-		self.hdr_label =
-			row_label(x, y, "HDR")
+		self.hdr_label = row_label(x, y, "HDR")
 		local hdr_init = self.selected_gs and self.selected_gs.screen.hdr_enabled or false
 		self.hdr = ensure_toggle(self.hdr, hdr_init, function(val)
 			self:on_hdr_toggle(val)
@@ -479,8 +469,7 @@ function PANEL:layout(win_w, win_h)
 		y = y + row_h + 5
 
 		-- Live HDR format indicator
-		self.hdr_status_label =
-			row_label(x, y, "Format")
+		self.hdr_status_label = row_label(x, y, "Format")
 		self.hdr_status = Label.new(x + label_w, y, "", {
 			width = cw - label_w,
 			height = row_h,
@@ -492,8 +481,7 @@ function PANEL:layout(win_w, win_h)
 		local hdr_on = self.selected_gs and self.selected_gs.screen.hdr_enabled
 		self._hdr_sub_visible = hdr_on
 		if hdr_on then
-			self.cm_label =
-				row_label(x, y, "CM")
+			self.cm_label = row_label(x, y, "CM")
 			self.cm = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
 				font_size = dd_font,
 				options = CM_OPTIONS,
@@ -507,8 +495,7 @@ function PANEL:layout(win_w, win_h)
 
 			self.sdrs_label, self.sdrsaturation = sdr_row("SDR Sat", "sdrsaturation")
 
-			self.sdr_eotf_label =
-				row_label(x, y, "SDR EOTF")
+			self.sdr_eotf_label = row_label(x, y, "SDR EOTF")
 			self.sdr_eotf = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
 				font_size = dd_font,
 				options = SDR_EOTF_OPTIONS,

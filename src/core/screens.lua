@@ -98,9 +98,7 @@ function M.load()
 
 		local current_format = monitor.currentFormat or "XRGB8888"
 		local cm_preset = monitor.colorManagementPreset or "srgb"
-		local is_hdr = current_format == "XR30"
-			or current_format == "XB30"
-			or cm_preset == "hdr"
+		local is_hdr = current_format == "XR30" or current_format == "XB30" or cm_preset == "hdr"
 		local screen = Screen.new({
 			uid = monitor.name,
 			name = monitor.description or monitor.name,

@@ -159,7 +159,7 @@ function M.install_sigfpe_handler()
 			if os.execute("command -v gcc > /dev/null 2>&1") == 0 then
 				cc = "gcc"
 			end
-			local rc = os.execute(string.format('%s -shared -fPIC -O0 -o %q %q 2>/dev/null', cc, so_path, tmp_c))
+			local rc = os.execute(string.format("%s -shared -fPIC -O0 -o %q %q 2>/dev/null", cc, so_path, tmp_c))
 			if rc ~= 0 or not file_exists(so_path) then
 				M.log("failed to compile SIGFPE handler (rc=%d); continuing without it", rc)
 				return
@@ -170,7 +170,7 @@ function M.install_sigfpe_handler()
 		end
 	end
 
-	ffi.cdef[[int install_fatal_handlers(void);]]
+	ffi.cdef([[int install_fatal_handlers(void);]])
 	local ok, lib = pcall(ffi.load, so_path)
 	if not ok or not lib then
 		M.log("failed to load fatal-signal handler lib: %s", tostring(lib))
