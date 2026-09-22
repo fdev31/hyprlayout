@@ -471,10 +471,14 @@ local function handle_cli()
 
 		local function sets_equal(a, b)
 			for k in pairs(a) do
-				if not b[k] then return false end
+				if not b[k] then
+					return false
+				end
 			end
 			for k in pairs(b) do
-				if not a[k] then return false end
+				if not a[k] then
+					return false
+				end
 			end
 			return true
 		end
