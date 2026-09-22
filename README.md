@@ -92,6 +92,22 @@ Stored under `~/.config/hyprlayout/`:
 - `settings.lua` — last-used UI settings (canvas scale, window size, …)
 - `profiles/` — one file per saved layout
 
+## Development
+
+- `just lint` — run [luacheck](https://github.com/luarocks/luacheck) over
+  `src/` (config in `.luacheckrc`).
+- Lua sources are kept formatted with [stylua](https://github.com/JohnnyMorganz/StyLua)
+  via a [pre-commit](https://pre-commit.com/) hook (`.pre-commit-config.yaml`).
+  After cloning, install the hook once:
+
+  ```sh
+  pre-commit install
+  ```
+
+  Requires the `pre-commit` framework and `stylua` on `PATH`. The hook
+  auto-formats staged `*.lua` files on commit; the vendored `src/dkjson.lua`
+  is excluded.
+
 ## Project layout
 
 ```
