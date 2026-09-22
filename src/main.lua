@@ -184,14 +184,50 @@ local function revert_layout(msg)
 	status_timer = 3
 end
 
+local function ensure_window_on_active_monitor(gui_screens)
+	local cur = love.window.getMonitor()
+	if not cur then
+		return
+	end
+	local cur_name = cur:getName()
+	local found = false
+	for _, gs in ipairs(gui_screens) do
+		if gs.screen.uid == cur_name then
+			found = true
+			if gs.screen.active then
+				return
+			end
+			break
+		end
+	end
+	if not found then
+		print("[hyprlayout] warning: window is on unmanaged monitor '" .. cur_name .. "', not moving")
+		return
+	end
+	for i = 0, love.window.getMonitorCount() - 1 do
+		local mon = love.window.getMonitor(i)
+		local mon_name = mon:getName()
+		for _, gs in ipairs(gui_screens) do
+			if gs.screen.uid == mon_name and gs.screen.active then
+				love.window.setMonitor(mon)
+				debug.log("moved window from disabled monitor '%s' to '%s'", cur_name, mon:getName())
+				return
+			end
+		end
+	end
+	print("[hyprlayout] warning: no active monitor available to move window to")
+end
+
 local function action_apply()
 	local cmds = apply.make_commands(gui_screens, SCREEN_SCALE)
 	if #cmds > 0 then
+		ensure_window_on_active_monitor(gui_screens)
 		debug.log("action_apply: before run_commands (%d cmds)", #cmds)
 		debug.dump_window_state("before apply")
 		apply.run_commands(cmds)
 		debug.log("action_apply: after run_commands")
 		debug.dump_window_state("after apply")
+		ensure_window_on_active_monitor(gui_screens)
 		confirm_start = os.clock()
 		status_msg = "Layout applied! Press ENTER to confirm or ESC to revert (" .. CONFIRM_DELAY .. "s)"
 		status_timer = CONFIRM_DELAY
