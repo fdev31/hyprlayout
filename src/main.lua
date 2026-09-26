@@ -9,6 +9,7 @@ local profile_apply = require("core.profile_apply")
 local settings = require("core.settings")
 local profiles = require("core.profiles")
 local debug = require("core.debug")
+local json = require("dkjson")
 local ffi = require("ffi")
 
 local SCREEN_SCALE = Panel.DEFAULT_CANVAS_SCALE
@@ -184,51 +185,127 @@ local function revert_layout(msg)
 	status_timer = 3
 end
 
-local function ensure_window_on_active_monitor(gui_screens)
-	local cur = love.window.getMonitor()
-	if not cur then
-		return
+-- --- hyprctl helpers for monitor detection (replacing unreliable LÖVE display APIs) ---
+
+local function run_hyprctl(args)
+	local f = io.popen("hyprctl " .. args .. " 2>&1")
+	local out = f:read("*a") or ""
+	f:close()
+	return out
+end
+
+local function get_hyprctl_monitors()
+	local out = run_hyprctl("-j monitors all")
+	local monitors = json.decode(out)
+	if not monitors or type(monitors) ~= "table" then
+		return nil
 	end
-	local cur_name = cur:getName()
-	local found = false
-	for _, gs in ipairs(gui_screens) do
-		if gs.screen.uid == cur_name then
-			found = true
-			if gs.screen.active then
-				return
-			end
-			break
+	return monitors
+end
+
+-- Returns the name of the focused (active) monitor, or nil.
+local function get_focused_monitor_name()
+	local monitors = get_hyprctl_monitors()
+	if not monitors then
+		return nil
+	end
+	for _, mon in ipairs(monitors) do
+		if mon.focused and not mon.disabled then
+			return mon.name
 		end
 	end
-	if not found then
-		print("[hyprlayout] warning: window is on unmanaged monitor '" .. cur_name .. "', not moving")
-		return
+	-- Fallback: first non-disabled monitor
+	for _, mon in ipairs(monitors) do
+		if not mon.disabled then
+			return mon.name
+		end
 	end
-	for i = 0, love.window.getMonitorCount() - 1 do
-		local mon = love.window.getMonitor(i)
-		local mon_name = mon:getName()
-		for _, gs in ipairs(gui_screens) do
-			if gs.screen.uid == mon_name and gs.screen.active then
-				love.window.setMonitor(mon)
-				debug.log("moved window from disabled monitor '%s' to '%s'", cur_name, mon:getName())
-				return
+	return nil
+end
+
+-- Returns the rect (x, y, w, h) of the focused/active monitor, or nil.
+local function get_active_monitor_rect()
+	local monitors = get_hyprctl_monitors()
+	if not monitors then
+		return nil
+	end
+	-- Prefer the focused monitor
+	for _, mon in ipairs(monitors) do
+		if mon.focused and not mon.disabled then
+			return { x = mon.x or 0, y = mon.y or 0, w = mon.width or 0, h = mon.height or 0 }
+		end
+	end
+	-- Fallback: first non-disabled monitor
+	for _, mon in ipairs(monitors) do
+		if not mon.disabled then
+			return { x = mon.x or 0, y = mon.y or 0, w = mon.width or 0, h = mon.height or 0 }
+		end
+	end
+	return nil
+end
+
+-- Returns the name of the monitor that contains the given (x, y) point, or nil.
+local function monitor_at_point(x, y)
+	local monitors = get_hyprctl_monitors()
+	if not monitors then
+		return nil
+	end
+	for _, mon in ipairs(monitors) do
+		if not mon.disabled then
+			local mx, my = mon.x or 0, mon.y or 0
+			local mw, mh = mon.width or 0, mon.height or 0
+			if x >= mx and x < mx + mw and y >= my and y < my + mh then
+				return mon.name
 			end
 		end
 	end
-	print("[hyprlayout] warning: no active monitor available to move window to")
+	return nil
+end
+
+local function ensure_window_on_active_monitor()
+	local mon_rect = get_active_monitor_rect()
+	if not mon_rect then
+		debug.log("ensure_window_on_active_monitor: no active monitor available")
+		return
+	end
+
+	-- Get the window's current position (x, y are still valid from LÖVE)
+	local ok, wx, wy = pcall(function()
+		return love.window.getPosition()
+	end)
+	if not ok or not wx then
+		return
+	end
+
+	-- Check if the window is already within the active monitor's bounds
+	if wx >= mon_rect.x and wx < mon_rect.x + mon_rect.w and wy >= mon_rect.y and wy < mon_rect.y + mon_rect.h then
+		return
+	end
+
+	-- Move the window into the active monitor's area
+	local target_x = mon_rect.x + 50
+	local target_y = mon_rect.y + 50
+	local pok = pcall(function()
+		love.window.setPosition(target_x, target_y)
+	end)
+	if pok then
+		debug.log("moved window to active monitor at (%d,%d)", target_x, target_y)
+	else
+		debug.log("ensure_window_on_active_monitor: failed to move window")
+	end
 end
 
 local function action_apply()
 	local cmds = apply.make_commands(gui_screens, SCREEN_SCALE)
 	if #cmds > 0 then
-		ensure_window_on_active_monitor(gui_screens)
+		ensure_window_on_active_monitor()
 		debug.log("action_apply: before run_commands (%d cmds)", #cmds)
 		debug.dump_window_state("before apply")
 		apply.run_commands(cmds)
 		debug.log("action_apply: after run_commands")
 		debug.dump_window_state("after apply")
-		ensure_window_on_active_monitor(gui_screens)
-		confirm_start = os.clock()
+		ensure_window_on_active_monitor()
+		confirm_start = love.timer.getTime()
 		status_msg = "Layout applied! Press ENTER to confirm or ESC to revert (" .. CONFIRM_DELAY .. "s)"
 		status_timer = CONFIRM_DELAY
 	end
@@ -638,13 +715,23 @@ local function track_window_state()
 	if not debug.enabled() then
 		return
 	end
-	local ok, sig = pcall(function()
-		local w, h = love.window.getSize()
+	-- Lightweight check first: window size/position from LÖVE (no subprocess)
+	local ok, w, h, x, y = pcall(function()
+		local w, h = love.window.getMode()
 		local x, y = love.window.getPosition()
-		local m = love.window.getMonitor()
-		return w .. "x" .. h .. "@" .. x .. "," .. y .. " mon=" .. tostring(m)
+		return w, h, x, y
 	end)
-	if ok and sig ~= last_window_sig then
+	if not ok then
+		return
+	end
+	local pos_sig = w .. "x" .. h .. "@" .. x .. "," .. y
+	if pos_sig == last_window_sig then
+		return
+	end
+	-- Position/size changed; use hyprctl to determine which monitor the window is on
+	local mon_name = monitor_at_point(x, y) or "unknown"
+	local sig = pos_sig .. " mon=" .. mon_name
+	if sig ~= last_window_sig then
 		last_window_sig = sig
 		debug.log("window state changed: %s", sig)
 		debug.dump_window_state("window changed")
@@ -669,8 +756,8 @@ function love.update(dt)
 		end
 	end
 	if confirm_start > 0 then
-		local elapsed = os.clock() - confirm_start
-		if elapsed * 10 >= CONFIRM_DELAY then
+		local elapsed = love.timer.getTime() - confirm_start
+		if elapsed >= CONFIRM_DELAY then
 			revert_layout("Timed out - reverted")
 		end
 	end
@@ -814,8 +901,8 @@ function love.draw()
 	panel:draw()
 
 	if confirm_start > 0 then
-		local elapsed = os.clock() - confirm_start
-		local remaining = CONFIRM_DELAY - (elapsed * 10)
+		local elapsed = love.timer.getTime() - confirm_start
+		local remaining = CONFIRM_DELAY - elapsed
 		local ratio = remaining / CONFIRM_DELAY
 		local win_w = love.graphics.getWidth()
 		local win_h = love.graphics.getHeight()
