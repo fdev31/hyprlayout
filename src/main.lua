@@ -35,6 +35,7 @@ local shot_timer = 0
 local help_visible = false
 local gui_initialized = false
 local last_window_sig = nil
+local last_pos_sig = nil
 
 local function build_gui_screens(info, scale)
 	local list = {}
@@ -201,26 +202,6 @@ local function get_hyprctl_monitors()
 		return nil
 	end
 	return monitors
-end
-
--- Returns the name of the focused (active) monitor, or nil.
-local function get_focused_monitor_name()
-	local monitors = get_hyprctl_monitors()
-	if not monitors then
-		return nil
-	end
-	for _, mon in ipairs(monitors) do
-		if mon.focused and not mon.disabled then
-			return mon.name
-		end
-	end
-	-- Fallback: first non-disabled monitor
-	for _, mon in ipairs(monitors) do
-		if not mon.disabled then
-			return mon.name
-		end
-	end
-	return nil
 end
 
 -- Returns the rect (x, y, w, h) of the focused/active monitor, or nil.
@@ -725,9 +706,10 @@ local function track_window_state()
 		return
 	end
 	local pos_sig = w .. "x" .. h .. "@" .. x .. "," .. y
-	if pos_sig == last_window_sig then
+	if pos_sig == last_pos_sig then
 		return
 	end
+	last_pos_sig = pos_sig
 	-- Position/size changed; use hyprctl to determine which monitor the window is on
 	local mon_name = monitor_at_point(x, y) or "unknown"
 	local sig = pos_sig .. " mon=" .. mon_name
