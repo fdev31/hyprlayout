@@ -8,11 +8,11 @@ local HDR_FORMATS = { XR30 = true, XB30 = true }
 local function to_rgba(src, dst, w, h)
 	if converter == "convert" then
 		return os.execute(
-			string.format('convert "%s" -resize "%dx%d" -depth 8 rgba:- > "%s" 2>/dev/null', src, w, h, dst)
+			string.format('convert "%s" -resize "%dx%d!" -depth 8 rgba:- > "%s" 2>/dev/null', src, w, h, dst)
 		)
 	elseif converter == "magick" then
 		return os.execute(
-			string.format('magick "%s" -resize "%dx%d" -depth 8 rgba:- > "%s" 2>/dev/null', src, w, h, dst)
+			string.format('magick "%s" -resize "%dx%d!" -depth 8 rgba:- > "%s" 2>/dev/null', src, w, h, dst)
 		)
 	elseif converter == "ffmpeg" then
 		return os.execute(
