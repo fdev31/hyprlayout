@@ -250,16 +250,22 @@ local function ensure_window_on_active_monitor()
 		return
 	end
 
-	-- Get the window's current position (x, y are still valid from LÖVE)
-	local ok, wx, wy = pcall(function()
-		return love.window.getPosition()
+	-- Get the window's current position and size (still valid from LÖVE)
+	local ok, wx, wy, ww, wh = pcall(function()
+		local wx, wy = love.window.getPosition()
+		local ww, wh = love.window.getSize()
+		return wx, wy, ww, wh
 	end)
 	if not ok or not wx then
 		return
 	end
 
-	-- Check if the window is already within the active monitor's bounds
-	if wx >= mon_rect.x and wx < mon_rect.x + mon_rect.w and wy >= mon_rect.y and wy < mon_rect.y + mon_rect.h then
+	-- Check if the window's center is within the active monitor's bounds.
+	-- Using the center (like love.window.getMonitor) so a window straddling
+	-- two monitors is still considered on the one it is centered on.
+	local cx = wx + ww / 2
+	local cy = wy + wh / 2
+	if cx >= mon_rect.x and cx < mon_rect.x + mon_rect.w and cy >= mon_rect.y and cy < mon_rect.y + mon_rect.h then
 		return
 	end
 
