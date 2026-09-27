@@ -527,10 +527,8 @@ local function handle_cli()
 		local current_by_name = {}
 		local current_by_uid = {}
 		for _, s in ipairs(screens.displayInfo) do
-			if s.active then
-				current_by_name[s.name] = true
-				current_by_uid[s.uid] = true
-			end
+			current_by_name[s.name] = true
+			current_by_uid[s.uid] = true
 		end
 
 		local function sets_equal(a, b)
