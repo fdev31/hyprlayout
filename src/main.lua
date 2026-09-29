@@ -282,16 +282,35 @@ local function ensure_window_on_active_monitor()
 	end
 end
 
+-- Ensure the hyprlayout window is on the active workspace so the confirmation
+-- modal stays visible after a layout change.
+local function ensure_window_on_active_workspace()
+	local snippet = [[
+local active = hl.get_active_workspace()
+for _, w in ipairs(hl.get_windows()) do
+  if w.title == 'hyprlayout' and w.workspace.id ~= active.id then
+    hl.dispatch(hl.dsp.window.move({window=w, workspace=active.id, follow=true}))
+  end
+end
+]]
+	local out = run_hyprctl('eval "' .. snippet .. '"')
+	if out ~= "ok" and out ~= "" then
+		debug.log("ensure_window_on_active_workspace: unexpected output: %s", out)
+	end
+end
+
 local function action_apply()
 	local cmds = apply.make_commands(gui_screens, SCREEN_SCALE)
 	if #cmds > 0 then
 		ensure_window_on_active_monitor()
+		ensure_window_on_active_workspace()
 		debug.log("action_apply: before run_commands (%d cmds)", #cmds)
 		debug.dump_window_state("before apply")
 		apply.run_commands(cmds)
 		debug.log("action_apply: after run_commands")
 		debug.dump_window_state("after apply")
 		ensure_window_on_active_monitor()
+		ensure_window_on_active_workspace()
 		confirm_start = love.timer.getTime()
 		status_msg = "Layout applied! Press ENTER to confirm or ESC to revert (" .. CONFIRM_DELAY .. "s)"
 		status_timer = CONFIRM_DELAY
