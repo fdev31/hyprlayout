@@ -317,6 +317,7 @@ local function layout_panel()
 		end
 		SCREENSHOT_INTERVAL = val
 		shot_timer = math.min(shot_timer, val)
+		hyprctl.set_timeout(val)
 		save_settings()
 	end
 	panel:update_profiles()
@@ -630,6 +631,7 @@ function love.load()
 		SCREENSHOT_INTERVAL = math.max(0.5, math.min(10, saved.shot_interval))
 		panel.shot_interval_value = SCREENSHOT_INTERVAL
 	end
+	hyprctl.set_timeout(SCREENSHOT_INTERVAL)
 
 	load_screens()
 	layout_panel()

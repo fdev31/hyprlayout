@@ -19,18 +19,32 @@ function M.detect()
 end
 
 -- Convert a PNG to raw RGBA (resized to w x h) at dst. Returns true on success.
-local function to_rgba(src, dst, w, h, converter)
+local function to_rgba(src, dst, w, h, converter, timeout)
 	if converter == "convert" then
 		return os.execute(
-			string.format('convert "%s" -resize "%dx%d!" -depth 8 rgba:- > "%s" 2>/dev/null', src, w, h, dst)
+			string.format(
+				'timeout %s convert "%s" -resize "%dx%d!" -depth 8 rgba:- > "%s" 2>/dev/null',
+				timeout,
+				src,
+				w,
+				h,
+				dst
+			)
 		)
 	elseif converter == "magick" then
 		return os.execute(
-			string.format('magick "%s" -resize "%dx%d!" -depth 8 rgba:- > "%s" 2>/dev/null', src, w, h, dst)
+			string.format(
+				'timeout %s magick "%s" -resize "%dx%d!" -depth 8 rgba:- > "%s" 2>/dev/null',
+				timeout,
+				src,
+				w,
+				h,
+				dst
+			)
 		)
 	elseif converter == "ffmpeg" then
-		local fmt = 'ffmpeg -y -i "%s" -vf "scale=%d:%d" -f rawvideo -pix_fmt rgba "%s" 2>/dev/null'
-		return os.execute(string.format(fmt, src, w, h, dst))
+		local fmt = 'timeout %s ffmpeg -y -i "%s" -vf "scale=%d:%d" -f rawvideo -pix_fmt rgba "%s" 2>/dev/null'
+		return os.execute(string.format(fmt, timeout, src, w, h, dst))
 	end
 	return false
 end
@@ -47,7 +61,7 @@ function M.capture(uid, dir, tw, th, converter, timeout)
 	if not os.execute(string.format('timeout %s grim -o "%s" "%s" 2>/dev/null', timeout, uid, png)) then
 		return nil
 	end
-	local ok = to_rgba(png, dir .. "/" .. rgba, tw, th, converter)
+	local ok = to_rgba(png, dir .. "/" .. rgba, tw, th, converter, timeout)
 	os.remove(png)
 	if not ok then
 		return nil

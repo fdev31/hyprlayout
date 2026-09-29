@@ -35,9 +35,13 @@ local M = {}
 
 -- --- backend internals (hyprctl / hl) ---
 
--- Run `hyprctl <args>` and return the trimmed stdout.
+-- Bounds (seconds) for any single hyprctl call. Set via M.set_timeout.
+local timeout = 5
+
+-- Run `hyprctl <args>` and return the trimmed stdout. The call is bounded by
+-- `timeout` so a wedged compositor cannot hang the UI.
 local function run(args)
-	local f = io.popen("hyprctl " .. args .. " 2>&1")
+	local f = io.popen(string.format("timeout %s hyprctl %s 2>&1", timeout, args))
 	local out = f:read("*a") or ""
 	f:close()
 	return out:match("^%s*(.-)%s*$")
@@ -113,6 +117,13 @@ local function config_to_snippet(cfg)
 end
 
 -- --- public API ---
+
+-- Set the per-call timeout (seconds) for all hyprctl invocations.
+function M.set_timeout(n)
+	if type(n) == "number" and n > 0 then
+		timeout = n
+	end
+end
 
 -- List all monitors as opaque Monitor values. Returns (list, raw); the list is
 -- empty when the backend could not be queried.
