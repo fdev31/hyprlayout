@@ -1,5 +1,4 @@
 local M = {}
-local debug = require("core.debug")
 
 -- The canvas is y-down (LÖVE), same orientation as Hyprland's top-left
 -- position, so we only normalize to a (0,0) origin — no y-flip.
@@ -20,7 +19,8 @@ local function trim_rects(rects)
 	end
 end
 
-function M.make_commands(gui_screens, canvas_scale)
+-- Build one opaque MonitorConfig per gui screen (see core.hyprctl for the shape).
+function M.make_configs(gui_screens, canvas_scale)
 	local rects = {}
 	for _, gs in ipairs(gui_screens) do
 		local r = gs.target_rect
@@ -33,64 +33,39 @@ function M.make_commands(gui_screens, canvas_scale)
 	end
 	trim_rects(rects)
 
-	local cmds = {}
+	local configs = {}
 	for i, gs in ipairs(gui_screens) do
 		local screen = gs.screen
 		local r = rects[i]
 		if screen.active then
-			local mode_str
+			local width, height, refresh
 			if screen.mode then
-				mode_str = string.format("%dx%d@%.2f", screen.mode.width, screen.mode.height, screen.mode.freq)
+				width, height, refresh = screen.mode.width, screen.mode.height, screen.mode.freq
 			else
-				mode_str = "preferred"
+				width, height, refresh = 1920, 1080, 60
 			end
-			local pos = string.format("%dx%d", math.floor(r.x), math.floor(r.y))
-			local cmd = string.format(
-				"hl.monitor({output='%s', disabled=false, mode='%s', position='%s', scale=%.6f, transform=%d",
-				screen.uid,
-				mode_str,
-				pos,
-				screen.scale,
-				screen.transform
-			)
-			if screen.hdr_enabled then
-				cmd = cmd
-					.. string.format(
-						", bitdepth=10, cm='%s', sdrbrightness=%.2f, sdrsaturation=%.2f, sdr_eotf='%s'",
-						screen.cm or "auto",
-						screen.sdrbrightness or 1.0,
-						screen.sdrsaturation or 1.0,
-						screen.sdr_eotf or "default"
-					)
-			else
-				cmd = cmd .. string.format(", bitdepth=8")
-			end
-			cmd = cmd .. "})"
-			table.insert(cmds, cmd)
+			table.insert(configs, {
+				name = screen.uid,
+				enabled = true,
+				width = width,
+				height = height,
+				refresh = refresh,
+				x = math.floor(r.x),
+				y = math.floor(r.y),
+				scale = screen.scale,
+				transform = screen.transform,
+				bitdepth = screen.hdr_enabled and 10 or 8,
+				cm = screen.cm or "auto",
+				sdr_eotf = screen.sdr_eotf or "default",
+				sdrbrightness = screen.sdrbrightness or 1.0,
+				sdrsaturation = screen.sdrsaturation or 1.0,
+			})
 		else
-			local cmd = string.format("hl.monitor({output='%s', disabled=true})", screen.uid)
-			table.insert(cmds, cmd)
+			table.insert(configs, { name = screen.uid, enabled = false })
 		end
 	end
 
-	local joined = table.concat(cmds, " ; ")
-	return { 'hyprctl eval "' .. joined .. '"' }
-end
-
-function M.run_commands(cmds)
-	for _, cmd in ipairs(cmds) do
-		print("Running: " .. cmd)
-		debug.log("run_commands: executing: %s", cmd)
-		debug.dump_window_state("before hyprctl")
-		local f = io.popen(cmd .. " 2>&1")
-		local out = f:read("*a") or ""
-		f:close()
-		debug.log("run_commands: output: %s", out == "" and "(empty)" or out)
-		debug.dump_window_state("after hyprctl")
-		if out ~= "" then
-			print(out)
-		end
-	end
+	return configs
 end
 
 return M

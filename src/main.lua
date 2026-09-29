@@ -9,7 +9,8 @@ local profile_apply = require("core.profile_apply")
 local settings = require("core.settings")
 local profiles = require("core.profiles")
 local debug = require("core.debug")
-local json = require("dkjson")
+local hyprctl = require("core.hyprctl")
+local grim = require("core.grim")
 local ffi = require("ffi")
 
 local SCREEN_SCALE = Panel.DEFAULT_CANVAS_SCALE
@@ -25,7 +26,7 @@ local status_timer = 0
 local panel = Panel.new()
 local panel_w = Panel.PANEL_W
 local confirm_start = 0
-local original_cmd = nil
+local original_configs = nil
 local anchor_data = {}
 local shot_threads = {}
 local shot_channel = nil
@@ -148,7 +149,7 @@ local function on_screen_resized(gs, old_w, old_h)
 end
 
 local function set_current_modes_as_ref()
-	original_cmd = apply.make_commands(gui_screens, SCREEN_SCALE)
+	original_configs = apply.make_configs(gui_screens, SCREEN_SCALE)
 end
 
 local function load_screens()
@@ -177,8 +178,8 @@ local function reload_all()
 end
 
 local function revert_layout(msg)
-	if original_cmd and #original_cmd > 0 then
-		apply.run_commands(original_cmd)
+	if original_configs and #original_configs > 0 then
+		hyprctl.configure_monitors(original_configs)
 	end
 	confirm_start = 0
 	reload_all()
@@ -186,61 +187,20 @@ local function revert_layout(msg)
 	status_timer = 3
 end
 
--- --- hyprctl helpers for monitor detection (replacing unreliable LÖVE display APIs) ---
-
-local function run_hyprctl(args)
-	local f = io.popen("hyprctl " .. args .. " 2>&1")
-	local out = f:read("*a") or ""
-	f:close()
-	return out
-end
-
-local function get_hyprctl_monitors()
-	local out = run_hyprctl("-j monitors all")
-	local monitors = json.decode(out)
-	if not monitors or type(monitors) ~= "table" then
-		return nil
-	end
-	return monitors
-end
+-- --- monitor helpers (backed by the hyprctl module) ---
 
 -- Returns the rect (x, y, w, h) of the focused/active monitor, or nil.
 local function get_active_monitor_rect()
-	local monitors = get_hyprctl_monitors()
-	if not monitors then
+	local mon = hyprctl.active_monitor()
+	if not mon then
 		return nil
 	end
-	-- Prefer the focused monitor
-	for _, mon in ipairs(monitors) do
-		if mon.focused and not mon.disabled then
-			return { x = mon.x or 0, y = mon.y or 0, w = mon.width or 0, h = mon.height or 0 }
-		end
-	end
-	-- Fallback: first non-disabled monitor
-	for _, mon in ipairs(monitors) do
-		if not mon.disabled then
-			return { x = mon.x or 0, y = mon.y or 0, w = mon.width or 0, h = mon.height or 0 }
-		end
-	end
-	return nil
+	return { x = mon.x or 0, y = mon.y or 0, w = mon.width or 0, h = mon.height or 0 }
 end
 
 -- Returns the name of the monitor that contains the given (x, y) point, or nil.
 local function monitor_at_point(x, y)
-	local monitors = get_hyprctl_monitors()
-	if not monitors then
-		return nil
-	end
-	for _, mon in ipairs(monitors) do
-		if not mon.disabled then
-			local mx, my = mon.x or 0, mon.y or 0
-			local mw, mh = mon.width or 0, mon.height or 0
-			if x >= mx and x < mx + mw and y >= my and y < my + mh then
-				return mon.name
-			end
-		end
-	end
-	return nil
+	return hyprctl.monitor_at_point(x, y)
 end
 
 local function ensure_window_on_active_monitor()
@@ -285,29 +245,24 @@ end
 -- Ensure the hyprlayout window is on the active workspace so the confirmation
 -- modal stays visible after a layout change.
 local function ensure_window_on_active_workspace()
-	local snippet = [[
-local active = hl.get_active_workspace()
-for _, w in ipairs(hl.get_windows()) do
-  if w.title == 'hyprlayout' and w.workspace.id ~= active.id then
-    hl.dispatch(hl.dsp.window.move({window=w, workspace=active.id, follow=true}))
-  end
-end
-]]
-	local out = run_hyprctl('eval "' .. snippet .. '"')
-	if out ~= "ok" and out ~= "" then
+	local ok, out = hyprctl.ensure_window_on_active_workspace()
+	if not ok then
 		debug.log("ensure_window_on_active_workspace: unexpected output: %s", out)
 	end
 end
 
 local function action_apply()
-	local cmds = apply.make_commands(gui_screens, SCREEN_SCALE)
-	if #cmds > 0 then
+	local configs = apply.make_configs(gui_screens, SCREEN_SCALE)
+	if #configs > 0 then
 		ensure_window_on_active_monitor()
 		ensure_window_on_active_workspace()
-		debug.log("action_apply: before run_commands (%d cmds)", #cmds)
+		debug.log("action_apply: before configure_monitors (%d configs)", #configs)
 		debug.dump_window_state("before apply")
-		apply.run_commands(cmds)
-		debug.log("action_apply: after run_commands")
+		local ok, out = hyprctl.configure_monitors(configs)
+		if not ok then
+			debug.log("action_apply: configure_monitors output: %s", out)
+		end
+		debug.log("action_apply: after configure_monitors")
 		debug.dump_window_state("after apply")
 		ensure_window_on_active_monitor()
 		ensure_window_on_active_workspace()
@@ -397,7 +352,7 @@ local function start_screenshot_thread()
 				currentFormat = scr.current_format,
 			}
 			local t = love.thread.newThread("core/screenshot_thread.lua")
-			t:start(info, shot_dir, shot_converter)
+			t:start(info, shot_dir, shot_converter, SCREENSHOT_INTERVAL)
 			table.insert(shot_threads, t)
 		end
 	end
@@ -488,11 +443,11 @@ local function headless_apply(data, canvas_scale)
 		end
 	end
 
-	local cmds = apply.make_commands(gs_list, canvas_scale)
-	debug.log("headless_apply: before run_commands (%d cmds)", #cmds)
+	local configs = apply.make_configs(gs_list, canvas_scale)
+	debug.log("headless_apply: before configure_monitors (%d configs)", #configs)
 	debug.dump_window_state("headless before apply")
-	apply.run_commands(cmds)
-	debug.log("headless_apply: after run_commands")
+	hyprctl.configure_monitors(configs)
+	debug.log("headless_apply: after configure_monitors")
 	debug.dump_window_state("headless after apply")
 end
 
@@ -655,14 +610,9 @@ function love.load()
 
 	-- Detect capture tools once and pass the result to each capture thread
 	-- (only serializable data crosses the LÖVE thread boundary).
-	shot_grim = os.execute("which grim > /dev/null 2>&1")
-	if os.execute("which convert > /dev/null 2>&1") then
-		shot_converter = "convert"
-	elseif os.execute("which magick > /dev/null 2>&1") then
-		shot_converter = "magick"
-	elseif os.execute("which ffmpeg > /dev/null 2>&1") then
-		shot_converter = "ffmpeg"
-	end
+	local tools = grim.detect()
+	shot_grim = tools.grim
+	shot_converter = tools.converter
 	os.execute('mkdir -p "' .. shot_dir .. '"')
 
 	local saved = settings.load()

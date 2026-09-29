@@ -1,4 +1,4 @@
-local json = require("dkjson")
+local hyprctl = require("core.hyprctl")
 
 local Mode = {}
 Mode.__index = Mode
@@ -40,13 +40,6 @@ local M = {}
 M.displayInfo = {}
 M.error = nil
 
-local function run(cmd)
-	local f = io.popen(cmd .. " 2>&1")
-	local out = f:read("*a") or ""
-	f:close()
-	return out
-end
-
 local function parse_mode_str(txt)
 	local w, h, freq = txt:match("^(%d+)x(%d+)@(%d+%.?%d*)Hz?$")
 	if not w then
@@ -62,10 +55,9 @@ function M.load()
 	M.displayInfo = {}
 	M.error = nil
 
-	local out = run("hyprctl -j monitors all")
-	local monitors = json.decode(out)
-	if not monitors or type(monitors) ~= "table" then
-		M.error = "Failed to get monitors from hyprctl:\n" .. out:sub(1, 200)
+	local monitors, raw = hyprctl.list_monitors()
+	if #monitors == 0 then
+		M.error = "Failed to get monitors:\n" .. (raw or ""):sub(1, 200)
 		print(M.error)
 		return false
 	end
