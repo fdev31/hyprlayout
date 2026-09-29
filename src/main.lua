@@ -9,7 +9,7 @@ local profile_apply = require("core.profile_apply")
 local settings = require("core.settings")
 local profiles = require("core.profiles")
 local debug = require("core.debug")
-local hyprctl = require("core.hyprctl")
+local backend = require("core.backend")
 local grim = require("core.grim")
 local ffi = require("ffi")
 
@@ -179,7 +179,7 @@ end
 
 local function revert_layout(msg)
 	if original_configs and #original_configs > 0 then
-		hyprctl.configure_monitors(original_configs)
+		backend.configure_monitors(original_configs)
 	end
 	confirm_start = 0
 	reload_all()
@@ -191,7 +191,7 @@ end
 
 -- Returns the rect (x, y, w, h) of the focused/active monitor, or nil.
 local function get_active_monitor_rect()
-	local mon = hyprctl.active_monitor()
+	local mon = backend.active_monitor()
 	if not mon then
 		return nil
 	end
@@ -200,7 +200,7 @@ end
 
 -- Returns the name of the monitor that contains the given (x, y) point, or nil.
 local function monitor_at_point(x, y)
-	return hyprctl.monitor_at_point(x, y)
+	return backend.monitor_at_point(x, y)
 end
 
 local function ensure_window_on_active_monitor()
@@ -245,7 +245,7 @@ end
 -- Ensure the hyprlayout window is on the active workspace so the confirmation
 -- modal stays visible after a layout change.
 local function ensure_window_on_active_workspace()
-	local ok, out = hyprctl.ensure_window_on_active_workspace()
+	local ok, out = backend.ensure_window_on_active_workspace()
 	if not ok then
 		debug.log("ensure_window_on_active_workspace: unexpected output: %s", out)
 	end
@@ -258,7 +258,7 @@ local function action_apply()
 		ensure_window_on_active_workspace()
 		debug.log("action_apply: before configure_monitors (%d configs)", #configs)
 		debug.dump_window_state("before apply")
-		local ok, out = hyprctl.configure_monitors(configs)
+		local ok, out = backend.configure_monitors(configs)
 		if not ok then
 			debug.log("action_apply: configure_monitors output: %s", out)
 		end
@@ -317,7 +317,7 @@ local function layout_panel()
 		end
 		SCREENSHOT_INTERVAL = val
 		shot_timer = math.min(shot_timer, val)
-		hyprctl.set_timeout(val)
+		backend.set_timeout(val)
 		save_settings()
 	end
 	panel:update_profiles()
@@ -447,7 +447,7 @@ local function headless_apply(data, canvas_scale)
 	local configs = apply.make_configs(gs_list, canvas_scale)
 	debug.log("headless_apply: before configure_monitors (%d configs)", #configs)
 	debug.dump_window_state("headless before apply")
-	hyprctl.configure_monitors(configs)
+	backend.configure_monitors(configs)
 	debug.log("headless_apply: after configure_monitors")
 	debug.dump_window_state("headless after apply")
 end
@@ -631,7 +631,7 @@ function love.load()
 		SCREENSHOT_INTERVAL = math.max(0.5, math.min(10, saved.shot_interval))
 		panel.shot_interval_value = SCREENSHOT_INTERVAL
 	end
-	hyprctl.set_timeout(SCREENSHOT_INTERVAL)
+	backend.set_timeout(SCREENSHOT_INTERVAL)
 
 	load_screens()
 	layout_panel()

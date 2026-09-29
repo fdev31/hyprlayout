@@ -1,10 +1,11 @@
 local json = require("dkjson")
 
--- Abstract display/window-manager API. The public surface only deals in simple
--- or opaque Lua types (numbers, strings, booleans, and the Monitor /
--- MonitorConfig tables documented below) so it can be re-implemented on top of
--- a different compositor or tool without touching the callers.
+-- hyprctl backend: drives a Hyprland instance through `hyprctl`. Supports the
+-- full feature set (scale, transform, HDR / color management).
 local M = {}
+
+M.name = "hyprctl"
+M.capabilities = { scale = true, transform = true, hdr = true }
 
 -- A Monitor is an opaque value describing one display. Fields:
 --   name: string          unique id / output name
@@ -32,8 +33,6 @@ local M = {}
 --   bitdepth: number
 --   cm, sdr_eotf: string
 --   sdrbrightness, sdrsaturation: number
-
--- --- backend internals (hyprctl / hl) ---
 
 -- Bounds (seconds) for any single hyprctl call. Set via M.set_timeout.
 local timeout = 5
@@ -116,7 +115,13 @@ local function config_to_snippet(cfg)
 	return s .. "})"
 end
 
--- --- public API ---
+-- --- backend contract ---
+
+-- True when hyprctl is present and a Hyprland instance answers it.
+function M.probe()
+	local mons = raw_monitors()
+	return mons ~= nil
+end
 
 -- Set the per-call timeout (seconds) for all hyprctl invocations.
 function M.set_timeout(n)
@@ -137,37 +142,6 @@ function M.list_monitors()
 		table.insert(out, normalize(m))
 	end
 	return out, raw
-end
-
--- Return the focused (or first non-disabled) monitor as an opaque Monitor, or nil.
-function M.active_monitor()
-	local mons = M.list_monitors()
-	for _, m in ipairs(mons) do
-		if m.focused and not m.disabled then
-			return m
-		end
-	end
-	for _, m in ipairs(mons) do
-		if not m.disabled then
-			return m
-		end
-	end
-	return nil
-end
-
--- Return the name (string) of the monitor containing the given (x, y) point, or nil.
-function M.monitor_at_point(x, y)
-	local mons = M.list_monitors()
-	for _, m in ipairs(mons) do
-		if not m.disabled then
-			local mx, my = m.x or 0, m.y or 0
-			local mw, mh = m.width or 0, m.height or 0
-			if x >= mx and x < mx + mw and y >= my and y < my + mh then
-				return m.name
-			end
-		end
-	end
-	return nil
 end
 
 -- Apply a list of MonitorConfig values. Returns (ok, output).

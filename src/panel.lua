@@ -6,6 +6,7 @@ local Slider = require("widgets.slider")
 local Modal = require("widgets.modal")
 local profiles = require("core.profiles")
 local profile_apply = require("core.profile_apply")
+local backend = require("core.backend")
 
 local PANEL = {}
 PANEL.__index = PANEL
@@ -381,6 +382,7 @@ function PANEL:layout(win_w, win_h)
 
 	-- === SCREEN SETTINGS SECTION (conditional) ===
 	if self.screen_settings_visible then
+		local caps = backend.capabilities()
 		y = y + 5
 		self.screen_title = Label.new(
 			x,
@@ -424,102 +426,114 @@ function PANEL:layout(win_w, win_h)
 		y = y + row_h + 5
 
 		-- Scale
-		self.scale_label = row_label(x, y, "Scale")
-		self.scale = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
-			font_size = dd_font,
-			options = {
-				{ name = "0.5", value = 0.5 },
-				{ name = "0.75", value = 0.75 },
-				{ name = "1.0", value = 1.0 },
-				{ name = "1.25", value = 1.25 },
-				{ name = "1.5", value = 1.5 },
-				{ name = "2.0", value = 2.0 },
-			},
-			on_change = function()
-				self:on_scale_change()
-			end,
-		})
-		y = y + row_h + 5
-
-		-- Rotation
-		self.rot_label = row_label(x, y, "Rotation")
-		self.rotation = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
-			font_size = dd_font,
-			options = {
-				{ name = "0 (normal)", value = 0 },
-				{ name = "1 (90 CW)", value = 1 },
-				{ name = "2 (180)", value = 2 },
-				{ name = "3 (90 CCW)", value = 3 },
-				{ name = "4 (flip H)", value = 4 },
-				{ name = "5 (flip V)", value = 5 },
-			},
-			on_change = function()
-				self:on_rotation_change()
-			end,
-		})
-		y = y + row_h + 5
-
-		-- HDR (master toggle: enables 10 bit + color management + SDR options)
-		-- Preserve instance across re-layouts so the knob keeps animating.
-		self.hdr_label = row_label(x, y, "HDR")
-		local hdr_init = self.selected_gs and self.selected_gs.screen.hdr_enabled or false
-		self.hdr = ensure_toggle(self.hdr, hdr_init, function(val)
-			self:on_hdr_toggle(val)
-		end)
-		y = y + row_h + 5
-
-		-- Live HDR format indicator
-		self.hdr_status_label = row_label(x, y, "Format")
-		self.hdr_status = Label.new(x + label_w, y, "", {
-			width = cw - label_w,
-			height = row_h,
-			font_size = math.floor(13 * ui_scale),
-		})
-		y = y + row_h + 5
-
-		-- HDR sub-options (only shown when HDR is enabled)
-		local hdr_on = self.selected_gs and self.selected_gs.screen.hdr_enabled
-		self._hdr_sub_visible = hdr_on
-		if hdr_on then
-			self.cm_label = row_label(x, y, "CM")
-			self.cm = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
+		if caps.scale then
+			self.scale_label = row_label(x, y, "Scale")
+			self.scale = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
 				font_size = dd_font,
-				options = CM_OPTIONS,
+				options = {
+					{ name = "0.5", value = 0.5 },
+					{ name = "0.75", value = 0.75 },
+					{ name = "1.0", value = 1.0 },
+					{ name = "1.25", value = 1.25 },
+					{ name = "1.5", value = 1.5 },
+					{ name = "2.0", value = 2.0 },
+				},
 				on_change = function()
-					self:on_cm_change()
-				end,
-			})
-			y = y + row_h + 5
-
-			self.sdrb_label, self.sdrbrightness = sdr_row("SDR Bright", "sdrbrightness")
-
-			self.sdrs_label, self.sdrsaturation = sdr_row("SDR Sat", "sdrsaturation")
-
-			self.sdr_eotf_label = row_label(x, y, "SDR EOTF")
-			self.sdr_eotf = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
-				font_size = dd_font,
-				options = SDR_EOTF_OPTIONS,
-				on_change = function()
-					self:on_sdr_eotf_change()
+					self:on_scale_change()
 				end,
 			})
 			y = y + row_h + 5
 		end
-		y = y + 5
+
+		-- Rotation
+		if caps.transform then
+			self.rot_label = row_label(x, y, "Rotation")
+			self.rotation = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
+				font_size = dd_font,
+				options = {
+					{ name = "0 (normal)", value = 0 },
+					{ name = "1 (90 CW)", value = 1 },
+					{ name = "2 (180)", value = 2 },
+					{ name = "3 (90 CCW)", value = 3 },
+					{ name = "4 (flip H)", value = 4 },
+					{ name = "5 (flip V)", value = 5 },
+				},
+				on_change = function()
+					self:on_rotation_change()
+				end,
+			})
+			y = y + row_h + 5
+		end
+
+		-- HDR (master toggle: enables 10 bit + color management + SDR options)
+		-- Preserve instance across re-layouts so the knob keeps animating.
+		if caps.hdr then
+			self.hdr_label = row_label(x, y, "HDR")
+			local hdr_init = self.selected_gs and self.selected_gs.screen.hdr_enabled or false
+			self.hdr = ensure_toggle(self.hdr, hdr_init, function(val)
+				self:on_hdr_toggle(val)
+			end)
+			y = y + row_h + 5
+
+			-- Live HDR format indicator
+			self.hdr_status_label = row_label(x, y, "Format")
+			self.hdr_status = Label.new(x + label_w, y, "", {
+				width = cw - label_w,
+				height = row_h,
+				font_size = math.floor(13 * ui_scale),
+			})
+			y = y + row_h + 5
+
+			-- HDR sub-options (only shown when HDR is enabled)
+			local hdr_on = self.selected_gs and self.selected_gs.screen.hdr_enabled
+			self._hdr_sub_visible = hdr_on
+			if hdr_on then
+				self.cm_label = row_label(x, y, "CM")
+				self.cm = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
+					font_size = dd_font,
+					options = CM_OPTIONS,
+					on_change = function()
+						self:on_cm_change()
+					end,
+				})
+				y = y + row_h + 5
+
+				self.sdrb_label, self.sdrbrightness = sdr_row("SDR Bright", "sdrbrightness")
+
+				self.sdrs_label, self.sdrsaturation = sdr_row("SDR Sat", "sdrsaturation")
+
+				self.sdr_eotf_label = row_label(x, y, "SDR EOTF")
+				self.sdr_eotf = Dropdown.new(x + label_w, y, cw - label_w, row_h, {
+					font_size = dd_font,
+					options = SDR_EOTF_OPTIONS,
+					on_change = function()
+						self:on_sdr_eotf_change()
+					end,
+				})
+				y = y + row_h + 5
+			end
+			y = y + 5
+		end
 
 		self.screen_widgets = {
 			self.resolutions,
 			self.frequencies,
-			self.scale,
-			self.rotation,
 			self.power,
-			self.hdr,
 		}
-		if hdr_on then
-			table.insert(self.screen_widgets, self.cm)
-			table.insert(self.screen_widgets, self.sdrbrightness)
-			table.insert(self.screen_widgets, self.sdrsaturation)
-			table.insert(self.screen_widgets, self.sdr_eotf)
+		if self.scale then
+			table.insert(self.screen_widgets, self.scale)
+		end
+		if self.rotation then
+			table.insert(self.screen_widgets, self.rotation)
+		end
+		if self.hdr then
+			table.insert(self.screen_widgets, self.hdr)
+			if self._hdr_sub_visible then
+				table.insert(self.screen_widgets, self.cm)
+				table.insert(self.screen_widgets, self.sdrbrightness)
+				table.insert(self.screen_widgets, self.sdrsaturation)
+				table.insert(self.screen_widgets, self.sdr_eotf)
+			end
 		end
 	end
 
@@ -637,31 +651,37 @@ function PANEL:set_screen(gs, scale_factor)
 	self:update_frequencies()
 
 	-- Scale
-	local scale_vals = { 0.5, 0.75, 1.0, 1.25, 1.5, 2.0 }
-	self.scale.selected_index = get_closest_match(scale_vals, screen.scale)
+	if self.scale then
+		local scale_vals = { 0.5, 0.75, 1.0, 1.25, 1.5, 2.0 }
+		self.scale.selected_index = get_closest_match(scale_vals, screen.scale)
+	end
 
 	-- Rotation
-	self.rotation.selected_index = screen.transform + 1
+	if self.rotation then
+		self.rotation.selected_index = screen.transform + 1
+	end
 
 	-- Power
 	self.power.toggled = screen.active
 
 	-- HDR
-	self.hdr.toggled = screen.hdr_enabled
-	-- If the panel was laid out with a different HDR state, re-layout to show/hide sub-widgets
-	if (screen.hdr_enabled and not self._hdr_sub_visible) or (not screen.hdr_enabled and self._hdr_sub_visible) then
-		if self.on_visibility_changed then
-			self.on_visibility_changed()
+	if self.hdr then
+		self.hdr.toggled = screen.hdr_enabled
+		-- If the panel was laid out with a different HDR state, re-layout to show/hide sub-widgets
+		if (screen.hdr_enabled and not self._hdr_sub_visible) or (not screen.hdr_enabled and self._hdr_sub_visible) then
+			if self.on_visibility_changed then
+				self.on_visibility_changed()
+			end
+			return
 		end
-		return
+		if screen.hdr_enabled then
+			self.cm.selected_index = find_option_index(CM_OPTIONS, screen.cm or "auto")
+			self.sdrbrightness.value = screen.sdrbrightness or 1.0
+			self.sdrsaturation.value = screen.sdrsaturation or 1.0
+			self.sdr_eotf.selected_index = find_option_index(SDR_EOTF_OPTIONS, screen.sdr_eotf or "default")
+		end
+		self.hdr_status:set_text(screen.current_format or "XRGB8888")
 	end
-	if screen.hdr_enabled then
-		self.cm.selected_index = find_option_index(CM_OPTIONS, screen.cm or "auto")
-		self.sdrbrightness.value = screen.sdrbrightness or 1.0
-		self.sdrsaturation.value = screen.sdrsaturation or 1.0
-		self.sdr_eotf.selected_index = find_option_index(SDR_EOTF_OPTIONS, screen.sdr_eotf or "default")
-	end
-	self.hdr_status:set_text(screen.current_format or "XRGB8888")
 end
 
 function PANEL:update_frequencies()
@@ -1046,16 +1066,22 @@ function PANEL:draw()
 		self.power_label:draw()
 		self.res_label:draw()
 		self.freq_label:draw()
-		self.scale_label:draw()
-		self.rot_label:draw()
-		self.hdr_label:draw()
-		self.hdr_status_label:draw()
-		self.hdr_status:draw()
-		if self.selected_gs and self.selected_gs.screen.hdr_enabled then
-			self.cm_label:draw()
-			self.sdrb_label:draw()
-			self.sdrs_label:draw()
-			self.sdr_eotf_label:draw()
+		if self.scale_label then
+			self.scale_label:draw()
+		end
+		if self.rot_label then
+			self.rot_label:draw()
+		end
+		if self.hdr_label then
+			self.hdr_label:draw()
+			self.hdr_status_label:draw()
+			self.hdr_status:draw()
+			if self.selected_gs and self.selected_gs.screen.hdr_enabled then
+				self.cm_label:draw()
+				self.sdrb_label:draw()
+				self.sdrs_label:draw()
+				self.sdr_eotf_label:draw()
+			end
 		end
 	end
 

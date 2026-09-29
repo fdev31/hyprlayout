@@ -1,4 +1,4 @@
-local hyprctl = require("core.hyprctl")
+local backend = require("core.backend")
 
 local Mode = {}
 Mode.__index = Mode
@@ -55,7 +55,7 @@ function M.load()
 	M.displayInfo = {}
 	M.error = nil
 
-	local monitors, raw = hyprctl.list_monitors()
+	local monitors, raw = backend.list_monitors()
 	if #monitors == 0 then
 		M.error = "Failed to get monitors:\n" .. (raw or ""):sub(1, 200)
 		print(M.error)
