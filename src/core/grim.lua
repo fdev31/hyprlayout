@@ -55,6 +55,7 @@ function M.capture(uid, dir, tw, th, converter, timeout)
 	local safe_uid = (uid:gsub("/", "_"):gsub(" ", "_"))
 	local png = dir .. "/.tmp_" .. safe_uid .. ".png"
 	local rgba = "shot_" .. safe_uid .. ".rgba"
+	timeout = tonumber(timeout)
 	if not timeout or timeout <= 0 then
 		timeout = 5
 	end
