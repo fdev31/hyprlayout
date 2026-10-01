@@ -122,7 +122,7 @@ local function change_canvas_scale(val)
 		r.width = r.width * ratio
 		r.height = r.height * ratio
 	end
-	center_layout(true)
+	center_layout()
 	anchor_data = anchors.detect(gui_screens)
 	panel.screen_scale.value = val
 	save_settings()
