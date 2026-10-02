@@ -5,6 +5,7 @@
 #   just check      run luacheck, then build the .love archive
 #   just build      build both dist/ artifacts (self-contained exe + .love file)
 #   just love       build only the dist/hyprlayout.love file (fast, no LÖVE build)
+#   just icons      regenerate the embedded icon module from the SVG sources
 #   just run        build, then run the self-contained executable
 #   just clean      remove dist/
 #   just distclean  remove dist/ and the cached LÖVE source/build tree
@@ -53,6 +54,12 @@ love:
     mkdir -p dist
     cd src && zip -r -q ../dist/hyprlayout.love conf.lua main.lua panel.lua gui_screen.lua dkjson.lua core widgets
     @echo "Built dist/hyprlayout.love ($(du -h dist/hyprlayout.love | cut -f1))"
+
+# Regenerate src/core/icons.lua (base64-embedded PNGs) from scripts/icon_*.svg.
+# Requires rsvg-convert. The generated file is committed, so this only needs to
+# run when the SVG sources change.
+icons:
+    ./scripts/rasterize_icons.sh
 
 install:
     ./install.sh

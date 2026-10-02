@@ -1,11 +1,35 @@
 local Widget = require("widgets.widget")
 local Anim = require("widgets.anim")
+local icons = require("core.icons")
 
 local Button = Widget:extend("Button")
 
 local DEFAULT_COLOR = { 0.3, 0.35, 0.45 }
 local HOVER_COLOR = { 0.4, 0.45, 0.55 }
 local ACTIVE_COLOR = { 0.5, 0.55, 0.65 }
+
+-- Resolve an icon spec into a love.Graphics.Image, or nil.
+-- Accepts a named icon (key in core.icons), a raw base64 PNG string, or an
+-- already-decoded love.Graphics.Image.
+local function resolve_icon(icon)
+	if not icon then
+		return nil
+	end
+	if type(icon) == "userdata" and icon.getWidth then
+		return icon
+	end
+	if type(icon) == "string" then
+		local named = icons.decode(icon)
+		if named then
+			return named
+		end
+		local ok, data = pcall(love.data.decode, "string", "base64", icon)
+		if ok and data then
+			return love.graphics.newImage(love.data.newByteData(data))
+		end
+	end
+	return nil
+end
 
 function Button.new(x, y, w, h, text, opts)
 	opts = opts or {}
@@ -22,6 +46,8 @@ function Button.new(x, y, w, h, text, opts)
 	self._hover = false
 	self._pressed = false
 	self._col = Anim.AnimColor.new(self.color[1], self.color[2], self.color[3])
+	self._icon = resolve_icon(opts.icon)
+	self.icon_size = opts.icon_size or 16
 	return self
 end
 
@@ -72,13 +98,31 @@ function Button:draw()
 		self.radius,
 		self.radius
 	)
-	love.graphics.setColor(1, 1, 1)
+
+	-- Draw the icon (if any) and the label centered together as a group.
 	love.graphics.setFont(self._font)
 	local font = self._font
 	local tw = font:getWidth(self.text)
-	local tx = self.rect.x + (self.rect.width - tw) / 2
-	local ty = self.rect.y + (self.rect.height - font:getHeight()) / 2
-	love.graphics.print(self.text, tx, ty)
+	local icon_w, gap = 0, 0
+	if self._icon then
+		icon_w = self.icon_size
+		gap = math.floor(self.icon_size * 0.375)
+	end
+	local total = icon_w + gap + tw
+	local cx = self.rect.x + (self.rect.width - total) / 2
+	local cy = self.rect.y + self.rect.height / 2
+	if self._icon then
+		local iy = cy - self.icon_size / 2
+		-- Scale the (64x64) source image down to icon_size, matching the
+		-- scale-factor draw pattern used elsewhere (see gui_screen.lua).
+		local scale = self.icon_size / self._icon:getWidth()
+		love.graphics.setColor(0, 0, 0)
+		love.graphics.draw(self._icon, cx, iy, 0, scale, scale)
+		cx = cx + icon_w + gap
+	end
+	local ty = cy - font:getHeight() / 2
+	love.graphics.setColor(0, 0, 0)
+	love.graphics.print(self.text, cx, ty)
 end
 
 return Button

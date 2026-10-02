@@ -337,28 +337,47 @@ function PANEL:layout(win_w, win_h)
 	y = y + row_h + 5
 
 	local bw = math.floor((cw - 3 * margin) / 4)
+	local icon_size = math.floor(16 * ui_scale)
 	self.btn_save = Button.new(x, y, bw, row_h, "Save", {
 		font_size = btn_font,
+		icon = "save",
+		icon_size = icon_size,
+		color = { 0.835, 0.545, 0.545 },
+		hover_color = { 0.919, 0.6, 0.6 },
+		active_color = { 0.71, 0.463, 0.463 },
 		on_click = function()
 			self:on_save_profile()
 		end,
 	})
 	self.btn_load = Button.new(x + bw + margin, y, bw, row_h, "Load", {
 		font_size = btn_font,
+		icon = "load",
+		icon_size = icon_size,
+		color = { 0.545, 0.914, 0.792 },
+		hover_color = { 0.6, 1.0, 0.871 },
+		active_color = { 0.463, 0.777, 0.673 },
 		on_click = function()
 			self:on_load_profile()
 		end,
 	})
 	self.btn_new = Button.new(x + 2 * (bw + margin), y, bw, row_h, "New", {
 		font_size = btn_font,
+		icon = "new",
+		icon_size = icon_size,
+		color = { 1.0, 0.725, 0.196 },
+		hover_color = { 1.0, 0.798, 0.216 },
+		active_color = { 0.85, 0.616, 0.167 },
 		on_click = function()
 			self:on_new_profile()
 		end,
 	})
 	self.btn_delete = Button.new(x + 3 * (bw + margin), y, bw, row_h, "Del", {
 		font_size = btn_font,
-		color = { 0.5, 0.2, 0.2 },
-		hover_color = { 0.6, 0.25, 0.25 },
+		icon = "delete",
+		icon_size = icon_size,
+		color = { 0.784, 0.392, 0.392 },
+		hover_color = { 0.862, 0.431, 0.431 },
+		active_color = { 0.666, 0.333, 0.333 },
 		on_click = function()
 			self:on_delete_profile()
 		end,
