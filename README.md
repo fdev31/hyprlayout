@@ -19,18 +19,13 @@ named profiles.
 
 **Optional — live screen preview**
 
-The per-monitor preview thumbnails are captured with a Wayland screencapture
-tool and downscaled with an image scaler. If either is missing the app still
-runs normally; the preview is simply omitted.
+The per-monitor preview thumbnails are captured with `grim`, which also
+downscales each capture at capture time (`grim -s`). If `grim` is missing the
+app still runs normally; the preview is simply omitted.
 
-- `grim` — captures each monitor
-- one of the following, to downscale each capture:
-  - ImageMagick 6 → `convert`
-  - ImageMagick 7 → `magick`
-  - `ffmpeg`
+- `grim` — captures and downscales each monitor
 
-On Arch: `sudo pacman -S grim imagemagick` (or `ffmpeg` instead of
-`imagemagick`).
+On Arch: `sudo pacman -S grim`
 
 ## Running from source
 

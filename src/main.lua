@@ -11,7 +11,6 @@ local profiles = require("core.profiles")
 local debug = require("core.debug")
 local backend = require("core.backend")
 local grim = require("core.grim")
-local ffi = require("ffi")
 
 local SCREEN_SCALE = Panel.DEFAULT_CANVAS_SCALE
 local CONFIRM_DELAY = 20
@@ -31,7 +30,6 @@ local anchor_data = {}
 local shot_threads = {}
 local shot_channel = nil
 local shot_grim = false
-local shot_converter = nil
 local shot_timer = 0
 local help_visible = false
 local gui_initialized = false
@@ -330,30 +328,47 @@ local shot_dir = nil
 
 local function start_screenshot_thread()
 	if not next(gui_screens) then
+		debug.log("screenshot: no gui screens yet, skipping")
 		return
 	end
-	if not (shot_grim and shot_converter) then
+	if not shot_grim then
+		debug.log("screenshot: grim not detected, skipping")
 		return
 	end
 	-- One capture thread per active screen so all monitors are grabbed in parallel.
 	shot_threads = {}
 	for _, gs in ipairs(gui_screens) do
 		local scr = gs.screen
-		if scr.active then
-			local tw, th
-			if scr.mode then
-				-- Decode at the size the preview is actually displayed at (the UI canvas scale)
-				tw, th = Rect.screen_size(scr.mode.width, scr.mode.height, scr.scale, SCREEN_SCALE, scr.transform)
-			end
-			local info = {
+		if not scr.active then
+			debug.log("screenshot: %s inactive, skipping", scr.uid)
+		elseif not scr.mode then
+			debug.log("screenshot: %s has no mode, skipping", scr.uid)
+		else
+			-- Capture at the size the preview is actually displayed at (the UI canvas scale).
+			-- grim does the downscaling at capture time via -s, so we only need the ratio.
+			local tw, th = Rect.screen_size(scr.mode.width, scr.mode.height, scr.scale, SCREEN_SCALE, scr.transform)
+			-- Width of the framebuffer grim captures (rotation swaps the axes).
+			local native_w = (scr.transform % 2 == 1) and scr.mode.height or scr.mode.width
+			local scale = tw / native_w
+			debug.log(
+				"screenshot: spawning thread for %s (mode=%dx%d screen_scale=%s transform=%s -> tw=%d th=%d scale=%s)",
+				scr.uid,
+				scr.mode.width,
+				scr.mode.height,
+				tostring(scr.scale),
+				tostring(scr.transform),
+				tw,
+				th,
+				scale
+			)
+			local t = love.thread.newThread("core/screenshot_thread.lua")
+			t:start({
 				uid = scr.uid,
 				active = scr.active,
 				tw = tw,
 				th = th,
 				currentFormat = scr.current_format,
-			}
-			local t = love.thread.newThread("core/screenshot_thread.lua")
-			t:start(info, shot_dir, shot_converter, SCREENSHOT_INTERVAL)
+			}, shot_dir, scale, SCREENSHOT_INTERVAL)
 			table.insert(shot_threads, t)
 		end
 	end
@@ -377,24 +392,35 @@ local function poll_screenshots()
 			break
 		end
 		if msg.type == "screenshot" then
-			-- The capture thread wrote raw RGBA (w*h*4 bytes) to the XDG cache dir.
-			-- This LÖVE build can't newImage() an absolute path, so decode the bytes
-			-- straight into an ImageData buffer via ffi.
-			local w, h = msg.w, msg.h
-			if w and h then
-				local f = io.open(shot_dir .. "/" .. msg.file, "rb")
-				if f then
-					local bytes = f:read("*a")
-					f:close()
-					if bytes and #bytes == w * h * 4 then
-						local id = love.image.newImageData(w, h)
-						ffi.copy(id:getPointer(), bytes, w * h * 4)
-						local img = love.graphics.newImage(id)
+			-- The capture thread wrote a scaled PNG to the XDG cache dir. This
+			-- LÖVE build can't newImage() an absolute path, so read the bytes and
+			-- decode the PNG in-memory via a ByteData (LÖVE/SDL does the RGBA decode).
+			debug.log("poll: screenshot msg uid=%s file=%s", msg.uid, msg.file)
+			local f = io.open(shot_dir .. "/" .. msg.file, "rb")
+			if not f then
+				debug.log("poll: could not open %s/%s", shot_dir, msg.file)
+			else
+				local bytes = f:read("*a")
+				f:close()
+				debug.log("poll: read %s bytes from %s", tostring(bytes and #bytes), msg.file)
+				if not (bytes and #bytes > 0) then
+					debug.log("poll: empty or unreadable file %s", msg.file)
+				else
+					local img = love.graphics.newImage(love.data.newByteData(bytes))
+					if img then
+						debug.log(
+							"poll: decoded %dx%d, setting preview for %s",
+							img:getWidth(),
+							img:getHeight(),
+							msg.uid
+						)
 						for _, gs in ipairs(gui_screens) do
 							if gs.screen.uid == msg.uid then
 								gs:set_preview(img)
 							end
 						end
+					else
+						debug.log("poll: newImage(ByteData) returned nil for %s", msg.file)
 					end
 				end
 			end
@@ -600,20 +626,18 @@ function love.load()
 	gui_initialized = true
 	math.randomseed(os.time())
 	shot_channel = love.thread.getChannel("screenshots")
-	-- Captures are cached in the XDG cache dir, never the game dir / repo. This
-	-- LÖVE build can't load images from an absolute path, so the capture thread
-	-- writes raw RGBA here and the main thread decodes it into an Image via ffi.
+	-- Captures are cached in the XDG cache dir, never the game dir / repo.
+	-- This LÖVE build can't load images from an absolute path, so the capture
+	-- thread writes a scaled PNG here and the main thread reads the bytes and
+	-- decodes the PNG in-memory via a ByteData.
 	local cache_base = os.getenv("XDG_CACHE_HOME")
 	if not cache_base or cache_base == "" then
 		cache_base = (os.getenv("HOME") or "/tmp") .. "/.cache"
 	end
 	shot_dir = cache_base .. "/hyprlayout/shots"
 
-	-- Detect capture tools once and pass the result to each capture thread
-	-- (only serializable data crosses the LÖVE thread boundary).
-	local tools = grim.detect()
-	shot_grim = tools.grim
-	shot_converter = tools.converter
+	-- Detect the capture tool once; previews are skipped when grim is missing.
+	shot_grim = grim.detect()
 	os.execute('mkdir -p "' .. shot_dir .. '"')
 
 	local saved = settings.load()
