@@ -1,5 +1,6 @@
 local Widget = require("widgets.widget")
 local Rect = require("core.rect")
+local theme = require("theme")
 
 local ANIMATION_LENGTH = 8
 local SCREEN_BORDER = 2
@@ -118,12 +119,12 @@ function GuiScreen:draw()
 		color = { math.floor(color[1] / 3), math.floor(color[2] / 3), math.floor(color[3] / 3) }
 	end
 
-	local border_color = { 100, 100, 155 }
+	local border_color = { 0.3, 0.3, 0.3 }
 	if not self.screen.active then
-		border_color = { 70, 70, 70 }
+		border_color = theme.secondary.main
 	end
 	if self.highlighted then
-		border_color = { 255, 201, 0 }
+		border_color = theme.primary.main
 	end
 
 	love.graphics.setColor(color[1] / 255, color[2] / 255, color[3] / 255)
@@ -137,7 +138,7 @@ function GuiScreen:draw()
 		love.graphics.rectangle("fill", r.x, r.y, r.width, r.height)
 	end
 
-	love.graphics.setColor(border_color[1] / 255, border_color[2] / 255, border_color[3] / 255)
+	love.graphics.setColor(border_color[1], border_color[2], border_color[3])
 	love.graphics.setLineWidth(self.cur_border)
 	love.graphics.rectangle(
 		"line",

@@ -7,6 +7,7 @@ local Modal = require("widgets.modal")
 local profiles = require("core.profiles")
 local profile_apply = require("core.profile_apply")
 local backend = require("core.backend")
+local theme = require("theme")
 
 local PANEL = {}
 PANEL.__index = PANEL
@@ -246,9 +247,9 @@ function PANEL:layout(win_w, win_h)
 	local top_btn_w = math.floor((cw - margin) / 2)
 	self.btn_reload = Button.new(x, y, top_btn_w, row_h, "Reload", {
 		font_size = btn_font,
-		color = { 1.0, 0.725, 0.196 },
-		hover_color = { 1.0, 0.798, 0.216 },
-		active_color = { 0.85, 0.616, 0.167 },
+		color = theme.primary.main,
+		hover_color = theme.primary.hover,
+		active_color = theme.primary.active,
 		on_click = function()
 			if self.on_reload then
 				self.on_reload()
@@ -257,9 +258,9 @@ function PANEL:layout(win_w, win_h)
 	})
 	self.btn_apply = Button.new(x + top_btn_w + margin, y, top_btn_w, row_h, "Apply", {
 		font_size = btn_font,
-		color = { 1.0, 0.725, 0.196 },
-		hover_color = { 1.0, 0.798, 0.216 },
-		active_color = { 0.85, 0.616, 0.167 },
+		color = theme.primary.main,
+		hover_color = theme.primary.hover,
+		active_color = theme.primary.active,
 		on_click = function()
 			self:on_apply()
 		end,
@@ -346,9 +347,9 @@ function PANEL:layout(win_w, win_h)
 		font_size = btn_font,
 		icon = "save",
 		icon_size = icon_size,
-		color = { 0.835, 0.545, 0.545 },
-		hover_color = { 0.919, 0.6, 0.6 },
-		active_color = { 0.71, 0.463, 0.463 },
+		color = theme.buttons.save.base,
+		hover_color = theme.buttons.save.hover,
+		active_color = theme.buttons.save.active,
 		on_click = function()
 			self:on_save_profile()
 		end,
@@ -357,9 +358,9 @@ function PANEL:layout(win_w, win_h)
 		font_size = btn_font,
 		icon = "load",
 		icon_size = icon_size,
-		color = { 0.545, 0.914, 0.792 },
-		hover_color = { 0.6, 1.0, 0.871 },
-		active_color = { 0.463, 0.777, 0.673 },
+		color = theme.buttons.load.base,
+		hover_color = theme.buttons.load.hover,
+		active_color = theme.buttons.load.active,
 		on_click = function()
 			self:on_load_profile()
 		end,
@@ -368,9 +369,9 @@ function PANEL:layout(win_w, win_h)
 		font_size = btn_font,
 		icon = "new",
 		icon_size = icon_size,
-		color = { 1.0, 0.725, 0.196 },
-		hover_color = { 1.0, 0.798, 0.216 },
-		active_color = { 0.85, 0.616, 0.167 },
+		color = theme.buttons.new.base,
+		hover_color = theme.buttons.new.hover,
+		active_color = theme.buttons.new.active,
 		on_click = function()
 			self:on_new_profile()
 		end,
@@ -379,9 +380,9 @@ function PANEL:layout(win_w, win_h)
 		font_size = btn_font,
 		icon = "delete",
 		icon_size = icon_size,
-		color = { 0.784, 0.392, 0.392 },
-		hover_color = { 0.862, 0.431, 0.431 },
-		active_color = { 0.666, 0.333, 0.333 },
+		color = theme.buttons.delete.base,
+		hover_color = theme.buttons.delete.hover,
+		active_color = theme.buttons.delete.active,
 		on_click = function()
 			self:on_delete_profile()
 		end,

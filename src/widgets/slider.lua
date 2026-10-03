@@ -1,14 +1,8 @@
 local Widget = require("widgets.widget")
 local Anim = require("widgets.anim")
+local theme = require("theme")
 
 local Slider = Widget:extend("Slider")
-
-local TRACK_COLOR = { 0.3, 0.3, 0.35 }
-local FILL_COLOR = { 0.3, 0.6, 0.4 }
-local KNOB_COLOR = { 0.9, 0.9, 0.9 }
-local KNOB_HOVER = { 1.0, 1.0, 1.0 }
-local TEXT_COLOR = { 0.9, 0.9, 0.9 }
-
 function Slider.new(x, y, w, h, opts)
 	opts = opts or {}
 	local self = Widget.new(x, y, w, h)
@@ -97,14 +91,14 @@ function Slider:draw()
 	local track_h = math.max(2, math.floor(4 * self.scale))
 	local track_y = r.y + r.height / 2 - track_h / 2
 
-	love.graphics.setColor(TRACK_COLOR[1], TRACK_COLOR[2], TRACK_COLOR[3])
+	love.graphics.setColor(theme.track_color[1], theme.track_color[2], theme.track_color[3])
 	love.graphics.rectangle("fill", track_x, track_y, track_w, track_h, 2, 2)
 
 	local disp = self._display.value
 	local ratio = (disp - self.min) / (self.max - self.min)
 	ratio = math.max(0, math.min(1, ratio))
 	local fill_w = ratio * track_w
-	love.graphics.setColor(FILL_COLOR[1], FILL_COLOR[2], FILL_COLOR[3])
+	love.graphics.setColor(theme.fill_color[1], theme.fill_color[2], theme.fill_color[3])
 	if fill_w > 0 then
 		love.graphics.rectangle("fill", track_x, track_y, fill_w, track_h, 2, 2)
 	end
@@ -112,12 +106,12 @@ function Slider:draw()
 	local knob_r = math.floor(7 * self.scale)
 	local knob_x = track_x + fill_w
 	local knob_y = r.y + r.height / 2
-	local kc = (self._hover or self._dragging) and KNOB_HOVER or KNOB_COLOR
+	local kc = (self._hover or self._dragging) and theme.knob_hover or theme.knob_color
 	love.graphics.setColor(kc[1], kc[2], kc[3])
 	love.graphics.circle("fill", knob_x, knob_y, knob_r)
 
 	-- label
-	love.graphics.setColor(TEXT_COLOR[1], TEXT_COLOR[2], TEXT_COLOR[3])
+	love.graphics.setColor(theme.text_color[1], theme.text_color[2], theme.text_color[3])
 	local val_text = self.format(self.value)
 	love.graphics.print(val_text, r.x, r.y + (r.height - self._font:getHeight()) / 2)
 end
