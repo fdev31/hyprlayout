@@ -246,6 +246,9 @@ function PANEL:layout(win_w, win_h)
 	local top_btn_w = math.floor((cw - margin) / 2)
 	self.btn_reload = Button.new(x, y, top_btn_w, row_h, "Reload", {
 		font_size = btn_font,
+		color = { 1.0, 0.725, 0.196 },
+		hover_color = { 1.0, 0.798, 0.216 },
+		active_color = { 0.85, 0.616, 0.167 },
 		on_click = function()
 			if self.on_reload then
 				self.on_reload()
@@ -254,8 +257,9 @@ function PANEL:layout(win_w, win_h)
 	})
 	self.btn_apply = Button.new(x + top_btn_w + margin, y, top_btn_w, row_h, "Apply", {
 		font_size = btn_font,
-		color = { 0.2, 0.5, 0.3 },
-		hover_color = { 0.25, 0.6, 0.35 },
+		color = { 1.0, 0.725, 0.196 },
+		hover_color = { 1.0, 0.798, 0.216 },
+		active_color = { 0.85, 0.616, 0.167 },
 		on_click = function()
 			self:on_apply()
 		end,
