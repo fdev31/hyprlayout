@@ -30,7 +30,7 @@ On Arch: `sudo pacman -S grim`
 ## Running from source
 
 ```sh
-just            # == love src
+love src
 ```
 
 ## Command line
