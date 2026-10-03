@@ -44,15 +44,19 @@ build:
     cmake -S .love-build/src -B .love-build/build -DCMAKE_BUILD_TYPE=Release -DLOVE_MPG123=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5
     cmake --build .love-build/build -j"$(nproc)"
     rm -rf dist && mkdir -p dist
-    cd src && zip -r -q ../dist/hyprlayout.love conf.lua main.lua panel.lua gui_screen.lua dkjson.lua core widgets
+    cd src && git ls-files | zip -r -q ../dist/hyprlayout.love -@
     cat .love-build/build/love dist/hyprlayout.love > dist/hyprlayout
     chmod +x dist/hyprlayout
     @echo "Built dist/hyprlayout ($(du -h dist/hyprlayout | cut -f1)) and dist/hyprlayout.love ($(du -h dist/hyprlayout.love | cut -f1))"
 
 # Build only the .love archive (fast; no LÖVE build required).
+# Uses `git ls-files` so only tracked files under src/ are packaged — new
+# files (e.g. theme.lua) are picked up automatically, and untracked/stale
+# files (editor temp files, .DS_Store, etc.) are never included.
 love:
     mkdir -p dist
-    cd src && zip -r -q ../dist/hyprlayout.love conf.lua main.lua panel.lua gui_screen.lua dkjson.lua core widgets
+    rm -f dist/hyprlayout.love
+    cd src && git ls-files | zip -r -q ../dist/hyprlayout.love -@
     @echo "Built dist/hyprlayout.love ($(du -h dist/hyprlayout.love | cut -f1))"
 
 # Regenerate src/core/icons.lua (base64-embedded PNGs) from scripts/icon_*.svg.
