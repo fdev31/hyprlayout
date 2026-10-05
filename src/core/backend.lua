@@ -7,6 +7,9 @@
 local M = {}
 
 local candidates = {
+	-- The hl backend only probes true inside Hyprland's Lua context; elsewhere
+	-- its probe returns false and the facade falls through to the rest.
+	require("core.backends.hl"),
 	require("core.backends.hyprctl"),
 	require("core.backends.xrandr"),
 	require("core.backends.wlrrandr"),

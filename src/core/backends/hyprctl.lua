@@ -1,4 +1,11 @@
-local json = require("dkjson")
+-- dkjson may not be present in every context that loads this module (e.g. when
+-- the shared core is required from Hyprland's Lua). Make the require lenient:
+-- when it is unavailable the backend simply fails its probe and the facade
+-- falls through to the next candidate.
+local json_ok, json = pcall(require, "dkjson")
+if not json_ok then
+	json = nil
+end
 
 -- hyprctl backend: drives a Hyprland instance through `hyprctl`. Supports the
 -- full feature set (scale, transform, HDR / color management).
@@ -77,6 +84,9 @@ end
 
 -- Fetch all raw monitors, or nil plus the raw output on failure.
 local function raw_monitors()
+	if not json then
+		return nil, "dkjson unavailable"
+	end
 	local out = run("-j monitors all")
 	local data = json.decode(out)
 	if type(data) ~= "table" then

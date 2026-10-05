@@ -51,17 +51,12 @@ local function parse_mode_str(txt)
 	return Mode.new(tonumber(w), tonumber(h), tonumber(freq) or 60)
 end
 
-function M.load()
-	M.displayInfo = {}
-	M.error = nil
-
-	local monitors, raw = backend.list_monitors()
-	if #monitors == 0 then
-		M.error = "Failed to get monitors:\n" .. (raw or ""):sub(1, 200)
-		print(M.error)
-		return false
-	end
-
+-- Convert a list of opaque Monitor values (see core.backends.hyprctl for the
+-- shape) into Screen objects. Pure: no backend I/O here, so it can be reused
+-- by any context that can produce the opaque shape (LÖVE via hyprctl, or
+-- Hyprland via the hl backend).
+function M.from_monitors(monitors)
+	local out = {}
 	for _, monitor in ipairs(monitors) do
 		local available = {}
 		for _, m in ipairs(monitor.availableModes or {}) do
@@ -109,9 +104,23 @@ function M.load()
 			sdr_max_luminance = monitor.sdrMaxLuminance or 80,
 			sdr_min_luminance = monitor.sdrMinLuminance or 0.2,
 		})
-		table.insert(M.displayInfo, screen)
+		table.insert(out, screen)
+	end
+	return out
+end
+
+function M.load()
+	M.displayInfo = {}
+	M.error = nil
+
+	local monitors, raw = backend.list_monitors()
+	if #monitors == 0 then
+		M.error = "Failed to get monitors:\n" .. (raw or ""):sub(1, 200)
+		print(M.error)
+		return false
 	end
 
+	M.displayInfo = M.from_monitors(monitors)
 	return #M.displayInfo > 0
 end
 

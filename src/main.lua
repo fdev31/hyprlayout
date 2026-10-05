@@ -5,7 +5,9 @@ local anchors = require("core.anchors")
 local GuiScreen = require("gui_screen")
 local Panel = require("panel")
 local apply = require("core.apply")
-local profile_apply = require("core.profile_apply")
+local profile_configs = require("core.profile_configs")
+local profile_match = require("core.profile_match")
+local install = require("core.install")
 local settings = require("core.settings")
 local profiles = require("core.profiles")
 local debug = require("core.debug")
@@ -39,19 +41,10 @@ local last_pos_sig = nil
 local function build_gui_screens(info, scale)
 	local list = {}
 	for _, screen in ipairs(info) do
-		local x, y = screen.position[1], screen.position[2]
-		local w, h
-		if screen.mode then
-			w, h = Rect.screen_size(screen.mode.width, screen.mode.height, screen.scale, scale, screen.transform)
-		else
-			local max_w, max_h = 1920, 1080
-			for _, m in ipairs(screen.available) do
-				max_w = math.max(max_w, m.width)
-				max_h = math.max(max_h, m.height)
-			end
-			w, h = Rect.screen_size(max_w, max_h, screen.scale, scale, screen.transform)
-		end
-		local rect = Rect.new(math.floor(x / scale), math.floor(y / scale), w, h)
+		-- Shared canvas-unit rect math (see core.profile_configs); wrap it in a
+		-- Rect so the GUI widgets can use the Rect API.
+		local r = profile_configs.initial_target_rect(screen, scale)
+		local rect = Rect.new(r.x, r.y, r.width, r.height)
 		table.insert(list, GuiScreen.new(screen, rect))
 	end
 	return list
@@ -447,30 +440,9 @@ local function headless_apply(data, canvas_scale)
 		return
 	end
 
-	local gs_list = build_gui_screens(screens.displayInfo, canvas_scale)
-
-	for _, entry in ipairs(data.screens or {}) do
-		local matched = false
-		if entry.monitor_name then
-			for _, gs in ipairs(gs_list) do
-				if gs.screen.name == entry.monitor_name then
-					profile_apply.apply_screen_entry(gs, entry, canvas_scale, { match_modes = true })
-					matched = true
-					break
-				end
-			end
-		end
-		if not matched then
-			for _, gs in ipairs(gs_list) do
-				if gs.screen.uid == entry.uid then
-					profile_apply.apply_screen_entry(gs, entry, canvas_scale, { match_modes = true })
-					break
-				end
-			end
-		end
-	end
-
-	local configs = apply.make_configs(gs_list, canvas_scale)
+	-- Shared profile→configs conversion (see core.profile_configs); the same
+	-- code path the Hyprland entry point uses.
+	local configs = profile_configs.make(data, screens.displayInfo, canvas_scale)
 	debug.log("headless_apply: before configure_monitors (%d configs)", #configs)
 	debug.dump_window_state("headless before apply")
 	backend.configure_monitors(configs)
@@ -525,72 +497,31 @@ local function handle_cli()
 
 	if a1 == "-m" then
 		screens.load()
-		local current_by_name = {}
-		local current_by_uid = {}
-		for _, s in ipairs(screens.displayInfo) do
-			current_by_name[s.name] = true
-			current_by_uid[s.uid] = true
-		end
-
-		local function sets_equal(a, b)
-			for k in pairs(a) do
-				if not b[k] then
-					return false
-				end
-			end
-			for k in pairs(b) do
-				if not a[k] then
-					return false
-				end
-			end
-			return true
-		end
-
-		local matched_name, matched_data
-
-		-- Pass 1: match by full monitor name
-		for _, name in ipairs(profiles.list_profiles()) do
-			local data = profiles.load_profile(name)
-			if data then
-				local has_names = true
-				local prof_names = {}
-				for _, s in ipairs(data.screens or {}) do
-					if s.monitor_name then
-						prof_names[s.monitor_name] = true
-					else
-						has_names = false
-						break
-					end
-				end
-				if has_names and sets_equal(current_by_name, prof_names) then
-					matched_name, matched_data = name, data
-					break
-				end
-			end
-		end
-
-		-- Pass 2: match by port/uid (fallback)
-		if not matched_name then
-			for _, name in ipairs(profiles.list_profiles()) do
-				local data = profiles.load_profile(name)
-				if data then
-					local prof = {}
-					for _, s in ipairs(data.screens or {}) do
-						prof[s.uid] = true
-					end
-					if sets_equal(current_by_uid, prof) then
-						matched_name, matched_data = name, data
-						break
-					end
-				end
-			end
-		end
-
+		local matched_name, matched_data = profile_match.find_matching_profile(screens.displayInfo)
 		if matched_name then
 			print("Matched profile " .. matched_name .. ". Applying it...")
 			headless_apply(matched_data, canvas_scale)
 		else
 			print("No matching profile for current display set")
+		end
+		cli_exit(0)
+		return true
+	end
+
+	if a1 == "install" then
+		-- Symlink the entry point into the Hyprland config dir and patch
+		-- hyprland.lua so require("hyprlayout").install() runs on boot.
+		-- The entry point sits next to main.lua in the game directory.
+		local srcdir = love.filesystem.getSource()
+		if not srcdir then
+			print("Could not determine the game source directory.")
+			cli_exit(1)
+		end
+		local entrypoint = srcdir .. "/hyprlayout.lua"
+		local ok, msg = install.run(entrypoint)
+		if not ok then
+			print(msg)
+			cli_exit(1)
 		end
 		cli_exit(0)
 		return true
@@ -602,6 +533,8 @@ Options:
          -l : list profiles
          -m : find a profile that matches the currently plugged display set, and apply it.
               No-op if not found; will apply first in alphabetical order if multiple found.
+    install : symlink the entry point into the Hyprland config dir and patch
+               hyprland.lua to auto-apply the layout on monitor add/remove.
  <profile name> : loads a profile]])
 		cli_exit(0)
 		return true

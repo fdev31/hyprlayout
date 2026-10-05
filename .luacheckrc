@@ -6,7 +6,8 @@ exclude_files = { "src/dkjson.lua" }
 
 -- LÖVE framework global. Writable: games assign lifecycle callbacks
 -- (love.load, love.update, love.draw, ...) to it.
-globals = { "love" }
+-- Hyprland's Lua API global; present only inside Hyprland's Lua context.
+globals = { "love", "hl" }
 
 -- OOP stubs keep unused arguments for interface conformance.
 unused_args = false
