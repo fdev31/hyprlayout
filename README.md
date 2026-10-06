@@ -14,7 +14,9 @@ named profiles.
 ./install.sh
 ```
 
-Optional step, automatically selects the best matching profile when monitors are plugged/unplugged:
+It is required to have ~/.local/bin/ in your $PATH to call `hyprlayout` in the shell.
+
+Optionally, install the hooks to automatically select the best matching profile on startup and when monitors are plugged or unplugged:
 
 ```sh
 hyprlayout install
