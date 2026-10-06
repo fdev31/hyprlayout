@@ -592,6 +592,9 @@ function love.load()
 
 	load_screens()
 	layout_panel()
+	-- Pre-select the first profile matching the current display set (if any),
+	-- mirroring the CLI -m behavior.
+	panel:auto_select_matching_profile()
 	panel.screen_scale.value = SCREEN_SCALE
 	for _, gs in ipairs(gui_screens) do
 		gs.ui_scale = panel.ui_scale_factor or 1.0

@@ -123,12 +123,24 @@ function M.list_profiles()
 	return profiles.list_profiles()
 end
 
+-- Debounce window (ms) for the auto-apply on monitor events. The compositor
+-- needs a moment to finish tearing down a disconnected output (and any
+-- capture sources bound to it) before we commit a new monitor config;
+-- applying synchronously inside the hotplug event races that teardown and can
+-- trip a compositor bug in the image-capture path (SIGSEGV in
+-- CScreenshareFrame::transform on a disconnected output).
+local AUTO_APPLY_DEBOUNCE_MS = 750
+
 local installed = false
 
 -- Install event handlers that automatically apply the matching profile when
 -- the monitor configuration changes (a monitor is plugged in or removed).
 -- Call this once from your Hyprland Lua config:
 --   require("hyprlayout").install()
+--
+-- The apply is debounced: each monitor event reschedules it, so a burst of
+-- hotplugs results in a single apply once the events settle and the
+-- compositor has finished processing them.
 --
 -- Returns (ok, err).
 function M.install()
@@ -146,17 +158,38 @@ function M.install()
 		end
 	end
 
+	-- Schedule the (debounced) auto-apply. Each event bumps the generation;
+	-- only the most recent scheduled timer actually applies, earlier ones fire
+	-- as no-ops (Hyprland releases a oneshot timer's callback when it fires,
+	-- so superseded timers are cleaned up without us cancelling them).
+	-- Without hl.timer (Hyprland < 0.55) we cannot defer, so fall back to the
+	-- legacy immediate apply.
+	local gen = 0
+	local function schedule()
+		if type(hl.timer) ~= "function" then
+			on_monitors_changed()
+			return
+		end
+		gen = gen + 1
+		local this = gen
+		hl.timer(function()
+			if this == gen then
+				on_monitors_changed()
+			end
+		end, { timeout = AUTO_APPLY_DEBOUNCE_MS, type = "oneshot" })
+	end
+
 	hl.on("hyprland.start", function(_monitor)
 		on_monitors_changed()
 	end)
 	hl.on("config.reloaded", function(_monitor)
-		on_monitors_changed()
+		schedule()
 	end)
 	hl.on("monitor.added", function(_monitor)
-		on_monitors_changed()
+		schedule()
 	end)
 	hl.on("monitor.removed", function(_monitor)
-		on_monitors_changed()
+		schedule()
 	end)
 
 	installed = true

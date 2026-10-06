@@ -6,6 +6,7 @@ local Slider = require("widgets.slider")
 local Modal = require("widgets.modal")
 local profiles = require("core.profiles")
 local profile_apply = require("core.profile_apply")
+local profile_match = require("core.profile_match")
 local backend = require("core.backend")
 local theme = require("theme")
 
@@ -747,6 +748,28 @@ function PANEL:update_profiles()
 				break
 			end
 		end
+	end
+end
+
+-- Select the first profile whose monitor set matches the current screens (the
+-- same matching the CLI -m flag uses). No-op when a profile is already
+-- selected or when nothing matches.
+function PANEL:auto_select_matching_profile()
+	if self._selected_profile_name then
+		return
+	end
+	local gs_list = self.get_all_screens and self.get_all_screens()
+	if not gs_list then
+		return
+	end
+	local current = {}
+	for _, gs in ipairs(gs_list) do
+		table.insert(current, gs.screen)
+	end
+	local name = profile_match.find_matching_profile(current)
+	if name then
+		self._selected_profile_name = name
+		self:update_profiles()
 	end
 end
 
