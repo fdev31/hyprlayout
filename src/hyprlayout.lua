@@ -146,6 +146,12 @@ function M.install()
 		end
 	end
 
+	hl.on("hyprland.start", function(_monitor)
+		on_monitors_changed()
+	end)
+	hl.on("config.reloaded", function(_monitor)
+		on_monitors_changed()
+	end)
 	hl.on("monitor.added", function(_monitor)
 		on_monitors_changed()
 	end)
