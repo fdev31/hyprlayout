@@ -7,6 +7,19 @@ screens into position, tune resolution / scale / rotation / HDR per output,
 then apply the layout with `hyprctl`. Layouts can be saved and recalled as
 named profiles.
 
+
+# Installation
+
+```sh
+./install.sh
+```
+
+Optional step, automatically selects the best matching profile when monitors are plugged/unplugged:
+
+```sh
+hyprlayout install
+```
+
 ## Requirements
 
 **Required**
