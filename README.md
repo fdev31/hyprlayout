@@ -10,6 +10,16 @@ named profiles.
 
 # Installation
 
+## Archlinux
+
+Use a package manager supporting AUR, eg:
+
+```sh
+yay -S hyprlayout
+```
+
+## Others
+
 ```sh
 ./install.sh
 ```
