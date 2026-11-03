@@ -1,10 +1,10 @@
 -- wlr-randr backend: drives a Wayland (wlroots) display through `wlr-randr`.
--- Supports the core operations only (position, mode, on/off) — no scale,
--- transform, or HDR.
+-- Supports position, mode, on/off, scale and transform — but not HDR / color
+-- management, which wlr-randr has no concept of.
 local M = {}
 
 M.name = "wlr-randr"
-M.capabilities = { scale = false, transform = false, hdr = false }
+M.capabilities = { scale = true, transform = true, hdr = false }
 
 local timeout = 5
 
@@ -40,62 +40,92 @@ local function new_monitor(name)
 	}
 end
 
--- Parse `wlr-randr` output into a list of Monitor values.
+-- wlr-randr spells transforms as names; the opaque shape uses Hyprland's
+-- numeric encoding.
+local TRANSFORM_TO_NUM = {
+	["normal"] = 0,
+	["90"] = 1,
+	["180"] = 2,
+	["270"] = 3,
+	["flipped"] = 4,
+	["flipped-90"] = 5,
+	["flipped-180"] = 6,
+	["flipped-270"] = 7,
+}
+
+local NUM_TO_TRANSFORM = {}
+for name, num in pairs(TRANSFORM_TO_NUM) do
+	NUM_TO_TRANSFORM[num] = name
+end
+
+-- wlr-randr matches `--mode` against the EDID rate at mHz precision, but the
+-- opaque shape rounds rates to two decimals. Remember the exact rate each
+-- rounded mode string came from so config_to_args can replay it verbatim
+-- instead of failing with "unknown mode".
+local exact_rates = {} -- [output name][mode string] = exact rate
+
+local function remember_rate(name, mode, freq)
+	local per_output = exact_rates[name]
+	if not per_output then
+		per_output = {}
+		exact_rates[name] = per_output
+	end
+	per_output[mode] = freq
+end
+
+local function exact_rate(name, mode, fallback)
+	local per_output = exact_rates[name]
+	return per_output and per_output[mode] or fallback
+end
+
+-- Parse `wlr-randr` output into a list of Monitor values. Each output is a
+-- header line `NAME "description"` followed by indented `Key: value` fields;
+-- the mode lines live under the `Modes:` field and look like
+-- `3440x1440 px, 59.973000 Hz (preferred, current)`. Position / Transform /
+-- Scale come *after* the Modes block.
 local function parse(out)
-	local mons = {}
-	local cur = nil
-	local mode_mode = false
-	for line in out:gmatch(".*") do
-		if line:sub(1, 1) ~= " " then
-			-- Monitor header: just the output name.
-			local name = line:match("^%s*(%S+)")
-			if name then
-				cur = new_monitor(name)
-				mode_mode = false
-				table.insert(mons, cur)
-			end
-		elseif cur then
-			local sline = line:match("^%s+(.*)$")
-			if sline then
-				if mode_mode then
-					-- Mode line, e.g. "1920x1080, 60.00 Hz [current]".
-					local w, h = sline:match("^(%d+)x(%d+)")
-					local freq = sline:match("%d+%.?%d*%s*Hz")
-					freq = freq and freq:match("(%d+%.?%d*)")
-					if w and h and freq then
-						local is_current = sline:find("current") ~= nil
-						table.insert(cur.availableModes, {
-							width = tonumber(w),
-							height = tonumber(h),
-							freq = tonumber(freq),
-						})
-						if is_current then
-							cur.refreshRate = tonumber(freq)
-							cur.width, cur.height = tonumber(w), tonumber(h)
-						end
-					end
-				elseif sline:sub(1, 6) == "Modes:" then
-					mode_mode = true
-				elseif sline:sub(1, 7) == "Enabled" then
-					cur.disabled = sline:find("yes") == nil
-					if sline:find("yes") ~= nil then
-						cur.focused = true
-					end
-				elseif sline:sub(1, 8) == "Position" then
-					local px, py = sline:match("Position:%s*(-?%d+),%s*(-?%d+)")
+	local monitors = {}
+	local monitor
+	for line in out:gmatch("[^\n]+") do
+		-- A header is the only line that starts with a bare token followed by a
+		-- quoted description; this also rejects error text such as
+		-- "compositor doesn't support wlr-output-management".
+		local name, description = line:match('^(%S+) "(.-)"')
+		if name then
+			monitor = new_monitor(name)
+			monitor.description = description
+			table.insert(monitors, monitor)
+		elseif monitor then
+			local field = line:match("^%s+(.-)%s*$") or ""
+			local w, h, freq = field:match("^(%d+)x(%d+)%s+px,%s*(%d+%.?%d*)%s+Hz")
+			if w then
+				-- Mode line.
+				w, h, freq = tonumber(w), tonumber(h), tonumber(freq)
+				local mode = string.format("%dx%d@%.2f", w, h, freq)
+				table.insert(monitor.availableModes, mode)
+				remember_rate(monitor.name, mode, freq)
+				if field:find("current", 1, true) then
+					monitor.width, monitor.height = w, h
+					monitor.refreshRate = freq
+				end
+			else
+				local key, value = field:match("^([%w%s]+):%s*(.-)$")
+				if key == "Enabled" then
+					monitor.disabled = value ~= "yes"
+				elseif key == "Position" then
+					local px, py = value:match("^(-?%d+),%s*(-?%d+)")
 					if px then
-						cur.x, cur.y = tonumber(px), tonumber(py)
+						monitor.x, monitor.y = tonumber(px), tonumber(py)
 					end
-				elseif sline:sub(1, 5) == "Scale" then
-					local s = sline:match("Scale:%s*(%d+%.?%d*)")
-					if s then
-						cur.scale = tonumber(s)
-					end
+				elseif key == "Scale" then
+					monitor.scale = tonumber(value) or monitor.scale
+				elseif key == "Transform" then
+					monitor.transform = TRANSFORM_TO_NUM[value] or 0
 				end
 			end
 		end
 	end
-	return mons
+	return monitors
 end
 
 -- Serialize one MonitorConfig into wlr-randr --output arguments.
@@ -103,18 +133,30 @@ local function config_to_args(cfg)
 	if not cfg.enabled then
 		return string.format("--output %s --off", cfg.name)
 	end
-	local mode = string.format("%dx%d", math.floor(cfg.width), math.floor(cfg.height))
-	local pos = string.format("%d,%d", math.floor(cfg.x), math.floor(cfg.y))
-	return string.format("--output %s --on --pos %s --mode %s", cfg.name, pos, mode)
+	local w, h = math.floor(cfg.width), math.floor(cfg.height)
+	local mode = string.format("%dx%d@%.2f", w, h, cfg.refresh or 60)
+	local rate = exact_rate(cfg.name, mode, cfg.refresh or 60)
+	local parts = {
+		string.format("--output %s --on", cfg.name),
+		string.format("--mode %dx%d@%.3fHz", w, h, rate),
+		string.format("--pos %d,%d", math.floor(cfg.x), math.floor(cfg.y)),
+	}
+	if cfg.scale and cfg.scale > 0 then
+		table.insert(parts, string.format("--scale %.6f", cfg.scale))
+	end
+	local transform = NUM_TO_TRANSFORM[cfg.transform or 0]
+	if transform then
+		table.insert(parts, "--transform " .. transform)
+	end
+	return table.concat(parts, " ")
 end
 
 -- --- backend contract ---
 
 -- True when wlr-randr is present and reports at least one output.
 function M.probe()
-	local out = run("wlr-randr")
-	local mons = parse(out)
-	return #mons > 0
+	local monitors = parse(run("wlr-randr"))
+	return #monitors > 0
 end
 
 -- Set the per-call timeout (seconds) for all wlr-randr invocations.
@@ -135,12 +177,18 @@ function M.configure_monitors(configs)
 	if #configs == 0 then
 		return true, ""
 	end
+	-- Populate the exact-rate table in case the caller applied a profile
+	-- without listing monitors first.
+	if next(exact_rates) == nil then
+		M.list_monitors()
+	end
 	local args = {}
 	for _, cfg in ipairs(configs) do
 		table.insert(args, config_to_args(cfg))
 	end
 	local out = run("wlr-randr " .. table.concat(args, " "))
-	return true, out
+	-- wlr-randr is silent on success; any output is a diagnostic.
+	return out == "", out
 end
 
 return M
