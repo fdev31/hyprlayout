@@ -1,3 +1,5 @@
 shots/
 dist/
 .love-build/
+debug.log
+.minia/
