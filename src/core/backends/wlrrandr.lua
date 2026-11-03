@@ -165,4 +165,8 @@ function M.configure_monitors(configs)
 	return out == "", out
 end
 
+-- Exposed for the fixture tests (tests/backends_test.lua).
+M._parse = parse
+M._config_to_args = config_to_args
+
 return M

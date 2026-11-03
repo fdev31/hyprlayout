@@ -1,8 +1,9 @@
 # hyprlayout build/run helpers (Linux only).
 #
 #   just            run the app from source
-#   just lint       run luacheck over src/
-#   just check      run luacheck, then build the .love archive
+#   just lint       run luacheck over src/ and tests/
+#   just test       run the backend parser tests
+#   just check      run luacheck + tests, then build the .love archive
 #   just build      build both dist/ artifacts (self-contained exe + .love file)
 #   just love       build only the dist/hyprlayout.love file (fast, no LÖVE build)
 #   just icons      regenerate the embedded icon module from the SVG sources
@@ -24,13 +25,18 @@
 # The first build clones LÖVE and compiles it (a few minutes); later builds are
 # fast because the source and build tree are cached in .love-build/.
 
-# Run luacheck static analysis over src/.
+# Run luacheck static analysis over src/ and tests/.
 lint:
-    luacheck src
+    luacheck src tests
 
-# Static checks: luacheck, then build the .love archive.
+# Run the backend parser tests (pure Lua, no compositor required).
+test:
+    lua tests/backends_test.lua
+
+# Static checks: luacheck, tests, then build the .love archive.
 check:
     @just lint
+    @just test
     @just love
 
 # Run the app from the source tree.
