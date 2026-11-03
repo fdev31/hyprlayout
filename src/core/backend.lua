@@ -11,8 +11,11 @@ local candidates = {
 	-- its probe returns false and the facade falls through to the rest.
 	require("core.backends.hl"),
 	require("core.backends.hyprctl"),
-	require("core.backends.xrandr"),
+	-- wlr-randr comes before xrandr: on a wlroots compositor XWayland usually
+	-- answers `xrandr` too, but it can only see the rootless X screen, so the
+	-- native Wayland protocol has to win.
 	require("core.backends.wlrrandr"),
+	require("core.backends.xrandr"),
 }
 
 local active = nil -- selected backend module, or nil if none available
