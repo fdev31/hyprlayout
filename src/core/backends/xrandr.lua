@@ -1,5 +1,7 @@
 -- xrandr backend: drives an X11 / legacy display through `xrandr`. Supports the
 -- core operations only (position, mode, on/off) — no scale, transform, or HDR.
+local util = require("core.backends.util")
+
 local M = {}
 
 M.name = "xrandr"
@@ -7,36 +9,8 @@ M.capabilities = { scale = false, transform = false, hdr = false }
 
 local timeout = 5
 
--- Run a shell command and return its trimmed stdout.
 local function run(cmd)
-	local f = io.popen(string.format("timeout %s %s 2>&1", timeout, cmd))
-	local out = f:read("*a") or ""
-	f:close()
-	return out:match("^%s*(.-)%s*$")
-end
-
--- Build a default Monitor value; the parser fills in the fields it can.
-local function new_monitor(name)
-	return {
-		name = name,
-		description = name,
-		x = 0,
-		y = 0,
-		width = 0,
-		height = 0,
-		scale = 1.0,
-		transform = 0,
-		refreshRate = 0,
-		focused = false,
-		disabled = true,
-		availableModes = {},
-		currentFormat = "",
-		colorManagementPreset = "",
-		sdrBrightness = 1.0,
-		sdrSaturation = 1.0,
-		sdrMaxLuminance = 0,
-		sdrMinLuminance = 0,
-	}
+	return util.run(cmd, timeout)
 end
 
 -- Parse `xrandr` output into a list of Monitor values. Each output is an
@@ -48,10 +22,10 @@ end
 local function parse(out)
 	local monitors = {}
 	local monitor
-	for line in out:gmatch("[^\n]+") do
+	for line in util.lines(out) do
 		local name, state = line:match("^(%S+)%s+(%a*connected)")
 		if name then
-			monitor = new_monitor(name)
+			monitor = util.new_monitor(name)
 			-- Usable only when connected and currently driving a geometry.
 			local w, h, px, py = line:match("(%d+)x(%d+)%+(-?%d+)%+(-?%d+)")
 			if w and state == "connected" then
@@ -67,10 +41,7 @@ local function parse(out)
 			local w, h, rates = field:match("^(%d+)x(%d+)%s+(.*)$")
 			if w and h then
 				for rate, flags in rates:gmatch("(%d+%.?%d*)([%*%+]*)") do
-					table.insert(
-						monitor.availableModes,
-						string.format("%dx%d@%.2f", tonumber(w), tonumber(h), tonumber(rate))
-					)
+					table.insert(monitor.availableModes, util.mode_string(tonumber(w), tonumber(h), tonumber(rate)))
 					if flags:find("*", 1, true) then
 						monitor.refreshRate = tonumber(rate)
 					end

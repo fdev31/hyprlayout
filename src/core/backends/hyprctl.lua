@@ -9,6 +9,8 @@ end
 
 -- hyprctl backend: drives a Hyprland instance through `hyprctl`. Supports the
 -- full feature set (scale, transform, HDR / color management).
+local util = require("core.backends.util")
+
 local M = {}
 
 M.name = "hyprctl"
@@ -24,7 +26,7 @@ M.capabilities = { scale = true, transform = true, hdr = true }
 --   refreshRate: number
 --   focused: boolean
 --   disabled: boolean
---   availableModes: { {width, height, freq}, ... }
+--   availableModes: { "WxH@F", ... }   (strings; see core.backends.util.mode_string)
 --   currentFormat: string
 --   colorManagementPreset: string
 --   sdrBrightness, sdrSaturation, sdrMaxLuminance, sdrMinLuminance: number
@@ -47,10 +49,7 @@ local timeout = 5
 -- Run `hyprctl <args>` and return the trimmed stdout. The call is bounded by
 -- `timeout` so a wedged compositor cannot hang the UI.
 local function run(args)
-	local f = io.popen(string.format("timeout %s hyprctl %s 2>&1", timeout, args))
-	local out = f:read("*a") or ""
-	f:close()
-	return out:match("^%s*(.-)%s*$")
+	return util.run("hyprctl " .. args, timeout)
 end
 
 -- Run a Lua snippet through `hyprctl eval` and return its trimmed output.

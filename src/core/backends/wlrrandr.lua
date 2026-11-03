@@ -1,6 +1,8 @@
 -- wlr-randr backend: drives a Wayland (wlroots) display through `wlr-randr`.
 -- Supports position, mode, on/off, scale and transform — but not HDR / color
 -- management, which wlr-randr has no concept of.
+local util = require("core.backends.util")
+
 local M = {}
 
 M.name = "wlr-randr"
@@ -8,36 +10,8 @@ M.capabilities = { scale = true, transform = true, hdr = false }
 
 local timeout = 5
 
--- Run a shell command and return its trimmed stdout.
 local function run(cmd)
-	local f = io.popen(string.format("timeout %s %s 2>&1", timeout, cmd))
-	local out = f:read("*a") or ""
-	f:close()
-	return out:match("^%s*(.-)%s*$")
-end
-
--- Build a default Monitor value; the parser fills in the fields it can.
-local function new_monitor(name)
-	return {
-		name = name,
-		description = name,
-		x = 0,
-		y = 0,
-		width = 0,
-		height = 0,
-		scale = 1.0,
-		transform = 0,
-		refreshRate = 0,
-		focused = false,
-		disabled = true,
-		availableModes = {},
-		currentFormat = "",
-		colorManagementPreset = "",
-		sdrBrightness = 1.0,
-		sdrSaturation = 1.0,
-		sdrMaxLuminance = 0,
-		sdrMinLuminance = 0,
-	}
+	return util.run(cmd, timeout)
 end
 
 -- wlr-randr spells transforms as names; the opaque shape uses Hyprland's
@@ -86,13 +60,13 @@ end
 local function parse(out)
 	local monitors = {}
 	local monitor
-	for line in out:gmatch("[^\n]+") do
+	for line in util.lines(out) do
 		-- A header is the only line that starts with a bare token followed by a
 		-- quoted description; this also rejects error text such as
 		-- "compositor doesn't support wlr-output-management".
 		local name, description = line:match('^(%S+) "(.-)"')
 		if name then
-			monitor = new_monitor(name)
+			monitor = util.new_monitor(name)
 			monitor.description = description
 			table.insert(monitors, monitor)
 		elseif monitor then
@@ -101,7 +75,7 @@ local function parse(out)
 			if w then
 				-- Mode line.
 				w, h, freq = tonumber(w), tonumber(h), tonumber(freq)
-				local mode = string.format("%dx%d@%.2f", w, h, freq)
+				local mode = util.mode_string(w, h, freq)
 				table.insert(monitor.availableModes, mode)
 				remember_rate(monitor.name, mode, freq)
 				if field:find("current", 1, true) then
@@ -134,7 +108,7 @@ local function config_to_args(cfg)
 		return string.format("--output %s --off", cfg.name)
 	end
 	local w, h = math.floor(cfg.width), math.floor(cfg.height)
-	local mode = string.format("%dx%d@%.2f", w, h, cfg.refresh or 60)
+	local mode = util.mode_string(w, h, cfg.refresh or 60)
 	local rate = exact_rate(cfg.name, mode, cfg.refresh or 60)
 	local parts = {
 		string.format("--output %s --on", cfg.name),

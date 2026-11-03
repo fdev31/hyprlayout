@@ -6,6 +6,8 @@
 -- It speaks the same opaque Monitor / MonitorConfig shapes as the hyprctl
 -- backend (see core.backends.hyprctl), so the rest of the core is agnostic to
 -- which one is active.
+local util = require("core.backends.util")
+
 local M = {}
 
 M.name = "hl"
@@ -27,7 +29,7 @@ function M.set_timeout(_n) end
 local function available_modes_strings(m)
 	local out = {}
 	for _, am in ipairs(m.available_modes or {}) do
-		table.insert(out, string.format("%dx%d@%.2f", am.width, am.height, am.refresh_rate))
+		table.insert(out, util.mode_string(am.width, am.height, am.refresh_rate))
 	end
 	return out
 end
