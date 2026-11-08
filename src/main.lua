@@ -13,6 +13,7 @@ local profiles = require("core.profiles")
 local debug = require("core.debug")
 local backend = require("core.backend")
 local grim = require("core.grim")
+local ffi = require("ffi")
 
 local SCREEN_SCALE = Panel.DEFAULT_CANVAS_SCALE
 local CONFIRM_DELAY = 20
@@ -368,56 +369,95 @@ local function start_screenshot_thread()
 end
 
 local function poll_screenshots()
-	for _, t in pairs(shot_threads) do
-		local ok, err = pcall(function()
-			return t:getError()
-		end)
-		if ok and err then
-			print("[screenshot thread error] " .. err)
-		end
+	local function u32le(n)
+		return string.char(n & 0xFF, (n >> 8) & 0xFF, (n >> 16) & 0xFF, (n >> 24) & 0xFF)
 	end
-	if not shot_channel then
-		return
+	local function u16le(n)
+		return string.char(n & 0xFF, (n >> 8) & 0xFF)
 	end
+
 	while true do
 		local msg = shot_channel:pop()
 		if not msg then
 			break
 		end
-		if msg.type == "screenshot" then
-			-- The capture thread wrote a scaled PNG to the XDG cache dir. This
-			-- LÖVE build can't newImage() an absolute path, so read the bytes and
-			-- decode the PNG in-memory via a ByteData (LÖVE/SDL does the RGBA decode).
-			debug.log("poll: screenshot msg uid=%s file=%s", msg.uid, msg.file)
-			local f = io.open(shot_dir .. "/" .. msg.file, "rb")
-			if not f then
-				debug.log("poll: could not open %s/%s", shot_dir, msg.file)
-			else
-				local bytes = f:read("*a")
-				f:close()
-				debug.log("poll: read %s bytes from %s", tostring(bytes and #bytes), msg.file)
-				if not (bytes and #bytes > 0) then
-					debug.log("poll: empty or unreadable file %s", msg.file)
-				else
-					local img = love.graphics.newImage(love.data.newByteData(bytes))
-					if img then
-						debug.log(
-							"poll: decoded %dx%d, setting preview for %s",
-							img:getWidth(),
-							img:getHeight(),
-							msg.uid
-						)
-						for _, gs in ipairs(gui_screens) do
-							if gs.screen.uid == msg.uid then
-								gs:set_preview(img)
-							end
-						end
-					else
-						debug.log("poll: newImage(ByteData) returned nil for %s", msg.file)
-					end
-				end
+
+		if msg.type ~= "screenshot" then
+			goto continue
+		end
+
+		local uid = msg.uid
+		local ppm = msg.data
+
+		-- Parse PPM P6 header: "P6\n<w> <h>\n<maxval>\n<raw rgb data>"
+		local s, e, w_str, h_str, maxval_str = ppm:find("P6%s+(%d+)%s+(%d+)%s+(%d+)%s")
+		if not s then
+			debug.log("poll: failed to parse PPM header for %s", uid)
+			goto continue
+		end
+		local w = tonumber(w_str)
+		local h = tonumber(h_str)
+		local raw_start = e + 1
+
+		-- Extract raw RGB bytes (top-down, 3 bytes/pixel)
+		local rgb_bytes = ppm:sub(raw_start, raw_start + w * h * 3 - 1)
+
+		-- Convert RGB (top-down) to BGRA (bottom-up) via FFI
+		local src = ffi.cast("const unsigned char*", rgb_bytes)
+		local dst = ffi.new("unsigned char[?]", w * h * 4)
+
+		for row = 0, h - 1 do
+			local ppm_off = (h - 1 - row) * w * 3
+			local bmp_off = row * w * 4
+			for col = 0, w - 1 do
+				local si = ppm_off + col * 3
+				local di = bmp_off + col * 4
+				dst[di] = src[si + 2]
+				dst[di + 1] = src[si + 1]
+				dst[di + 2] = src[si]
+				dst[di + 3] = 255
 			end
 		end
+
+		-- Build 54-byte BMP header (32-bit, uncompressed, bottom-up)
+		local pixel_size = w * h * 4
+		local file_size = 54 + pixel_size
+
+		local bmp_header = "BM"
+			.. u32le(file_size)
+			.. u32le(0)
+			.. u32le(54)
+			.. u32le(40)
+			.. u32le(w)
+			.. u32le(h)
+			.. u16le(1)
+			.. u16le(32)
+			.. u32le(0)
+			.. u32le(pixel_size)
+			.. u32le(0)
+			.. u32le(0)
+			.. u32le(0)
+			.. u32le(0)
+
+		-- Assemble complete BMP: header + pixel data
+		local bmp = bmp_header .. ffi.string(dst, pixel_size)
+
+		-- Create image from BMP bytes (proven working path in this LÖVE build)
+		local img = love.graphics.newImage(love.data.newByteData(bmp))
+		if not img then
+			debug.log("poll: newImage failed for %dx%d %s", w, h, uid)
+			goto continue
+		end
+
+		-- Attach to the matching gui_screen
+		for _, gs in ipairs(gui_screens) do
+			if gs.screen.uid == uid then
+				gs.preview = img
+				break
+			end
+		end
+
+		::continue::
 	end
 end
 

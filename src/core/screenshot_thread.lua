@@ -27,10 +27,10 @@ if not valid then
 elseif HDR_FORMATS[s.currentFormat] then
 	print("[shot-thread] skipping HDR monitor " .. s.uid .. " (grim hangs on 10-bit)")
 else
-	local file = grim.capture(s.uid, shot_dir, scale, timeout)
-	if file then
-		debug.log("thread: capture ok, pushing screenshot msg for %s (%s)", s.uid, file)
-		channel:push({ type = "screenshot", uid = s.uid, file = file })
+	local data = grim.capture_ppm(s.uid, scale, timeout)
+	if data then
+		debug.log("thread: capture ok, pushing raw PPM for %s (%d bytes)", s.uid, #data)
+		channel:push({ type = "screenshot", uid = s.uid, data = data })
 	else
 		print("[shot-thread] capture failed for " .. s.uid)
 	end
