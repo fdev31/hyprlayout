@@ -3,7 +3,7 @@
  * Implements ext-image-copy-capture-v1 + linux-dmabuf for zero-copy frame capture.
  * Compiled as a shared library, loaded via LuaJIT FFI.
  *
- * Build: cc -shared -fPIC -O2 -o wayland_capture.so wayland_capture.c -lwayland-client
+ * Build: cc -shared -fPIC -O2 -o wayland_capture.so wayland_capture.c -lwayland-client -lpthread
  */
 
 #define _GNU_SOURCE
@@ -12,6 +12,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <poll.h>
+#include <pthread.h>
 #include <sys/mman.h>
 #include <wayland-client.h>
 
@@ -83,6 +84,7 @@ static struct wl_registry  *g_registry    = NULL;
 static struct wl_proxy     *g_capture_v1  = NULL;
 static struct wl_output    *g_output      = NULL;
 static int                  g_initialized = 0;
+static pthread_mutex_t      g_capture_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* Per-capture frame state */
 static int    g_fd         = -1;
@@ -206,12 +208,18 @@ static const struct frame_listener frame_listener = {
 
 int wlcap_init(void)
 {
-    if (g_initialized)
+    pthread_mutex_lock(&g_capture_mutex);
+
+    if (g_initialized) {
+        pthread_mutex_unlock(&g_capture_mutex);
         return 0;
+    }
 
     g_display = wl_display_connect(NULL);
-    if (!g_display)
+    if (!g_display) {
+        pthread_mutex_unlock(&g_capture_mutex);
         return -1;
+    }
 
     g_registry = wl_display_get_registry(g_display);
     wl_registry_add_listener(g_registry, &registry_listener, NULL);
@@ -229,17 +237,23 @@ int wlcap_init(void)
         wl_display_disconnect(g_display);
         g_display  = NULL;
         g_registry = NULL;
+        pthread_mutex_unlock(&g_capture_mutex);
         return -1;
     }
 
     g_initialized = 1;
+    pthread_mutex_unlock(&g_capture_mutex);
     return 0;
 }
 
 void wlcap_shutdown(void)
 {
-    if (!g_initialized)
+    pthread_mutex_lock(&g_capture_mutex);
+
+    if (!g_initialized) {
+        pthread_mutex_unlock(&g_capture_mutex);
         return;
+    }
 
     if (g_output)
         wl_output_destroy(g_output);
@@ -255,13 +269,19 @@ void wlcap_shutdown(void)
     g_capture_v1  = NULL;
     g_output      = NULL;
     g_initialized = 0;
+
+    pthread_mutex_unlock(&g_capture_mutex);
 }
 
 int wlcap_capture(const char *output_name, int *w, int *h,
                    int *stride, int *size, void **data)
 {
-    if (!g_initialized || !g_output)
+    pthread_mutex_lock(&g_capture_mutex);
+
+    if (!g_initialized || !g_output) {
+        pthread_mutex_unlock(&g_capture_mutex);
         return -1;
+    }
 
     (void)output_name; /* TODO: multi-monitor selection */
 
@@ -278,14 +298,17 @@ int wlcap_capture(const char *output_name, int *w, int *h,
     /* Create the zxdg_output for capture */
     struct wl_proxy *zxdg_output = wl_proxy_marshal_constructor(
         g_capture_v1, 0, &zxdg_output_v1_interface, g_output);
-    if (!zxdg_output)
+    if (!zxdg_output) {
+        pthread_mutex_unlock(&g_capture_mutex);
         return -1;
+    }
 
     /* Request a frame capture */
     struct wl_proxy *frame = wl_proxy_marshal_constructor(
         zxdg_output, 0, &zxdg_toplevel_capture_v1_interface);
     if (!frame) {
         wl_proxy_destroy(zxdg_output);
+        pthread_mutex_unlock(&g_capture_mutex);
         return -1;
     }
 
@@ -311,6 +334,7 @@ int wlcap_capture(const char *output_name, int *w, int *h,
     if (!g_frame_done || g_fd < 0) {
         wl_proxy_destroy(frame);
         wl_proxy_destroy(zxdg_output);
+        pthread_mutex_unlock(&g_capture_mutex);
         return -1;
     }
 
@@ -322,6 +346,7 @@ int wlcap_capture(const char *output_name, int *w, int *h,
         g_fd = -1;
         wl_proxy_destroy(frame);
         wl_proxy_destroy(zxdg_output);
+        pthread_mutex_unlock(&g_capture_mutex);
         return -1;
     }
 
@@ -338,6 +363,7 @@ int wlcap_capture(const char *output_name, int *w, int *h,
     *size = (int)g_map_size;
     *data = g_map;
 
+    pthread_mutex_unlock(&g_capture_mutex);
     return 0;
 }
 
