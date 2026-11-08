@@ -27,6 +27,7 @@ local debug = require("core.debug")
  ------------------------------------------------------------------ ]]
 
 ffi.cdef([[
+typedef int pid_t;
 int    pipe(int fds[2]);
 pid_t  fork(void);
 int    dup2(int oldfd, int newfd);
