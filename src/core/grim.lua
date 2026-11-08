@@ -106,7 +106,7 @@ function M.capture_native(uid, scale, timeout)
 	end
 
 	-- Attempt the native capture
-	local result = wayland_capture.capture(uid)
+	local result = wayland_capture.capture(uid, scale)
 	if not result then
 		debug.log("capture_native %s: native capture failed, falling back to ppm", uid)
 		local ppm = M.capture_ppm(uid, scale, timeout)
