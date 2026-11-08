@@ -48,8 +48,17 @@ struct pollfd { int fd; short events; short revents; };
 
 local C_SOURCE_PATH
 do
-	local src_dir = love.filesystem.getSourceDirectory()
-	C_SOURCE_PATH = src_dir .. "/core/wayland_capture.c"
+	-- love.filesystem is nil in worker threads, so derive the path from
+	-- this file's own location instead.
+	local src_file = debug.getinfo(1, "S").source
+	-- Lua prepends '@' to file sources; strip it.
+	src_file = src_file:sub(2)
+	if src_file:match("%.lua$") then
+		local src_dir = src_file:match("^(.*)/core/wayland_capture%.lua$")
+		if src_dir then
+			C_SOURCE_PATH = src_dir .. "/core/wayland_capture.c"
+		end
+	end
 end
 
 --[[ ------------------------------------------------------------------
