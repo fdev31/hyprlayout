@@ -36,6 +36,7 @@ int    execvp(const char *file, char *const argv[]);
 ssize_t read(int fd, void *buf, size_t count);
 ssize_t write(int fd, const void *buf, size_t count);
 int    close(int fd);
+int    kill(pid_t pid, int sig);
 int    waitpid(pid_t pid, int *status);
 int    poll(struct pollfd *fds, unsigned int nfds, int timeout);
 void   _exit(int status);
@@ -155,6 +156,8 @@ local function cleanup_child()
 		read_fd = nil
 	end
 	if child_pid then
+		-- Kill the child first so waitpid() doesn't block on a hung process.
+		ffi.C.kill(child_pid, 9) -- SIGKILL
 		local status = ffi.new("int[1]")
 		ffi.C.waitpid(child_pid, status)
 		child_pid = nil

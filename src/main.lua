@@ -666,6 +666,10 @@ function love.quit()
 	for _, t in pairs(shot_threads) do
 		t:wait()
 	end
+	-- Shut down the native capture child process (if running)
+	pcall(function()
+		require("core.wayland_capture").shutdown()
+	end)
 	-- LÖVE's own shutdown (lua_close) crashes in SDL3's Wayland teardown after a
 	-- monitor reconfiguration, so terminate directly once our cleanup is done.
 	if gui_initialized then
