@@ -27,7 +27,7 @@ if not valid then
 elseif HDR_FORMATS[s.currentFormat] then
 	print("[shot-thread] skipping HDR monitor " .. s.uid .. " (grim hangs on 10-bit)")
 else
-	local data = grim.capture_ppm(s.uid, scale, timeout)
+	local data = grim.capture_native(s.uid, scale, timeout)
 	if data then
 		debug.log("thread: capture ok, pushing raw PPM for %s (%d bytes)", s.uid, #data)
 		channel:push({ type = "screenshot", uid = s.uid, data = data })

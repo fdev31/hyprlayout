@@ -376,54 +376,10 @@ local function poll_screenshots()
 		return string.char(n & 0xFF, (n >> 8) & 0xFF)
 	end
 
-	while true do
-		local msg = shot_channel:pop()
-		if not msg then
-			break
-		end
-
-		if msg.type ~= "screenshot" then
-			goto continue
-		end
-
-		local uid = msg.uid
-		local ppm = msg.data
-
-		-- Parse PPM P6 header: "P6\n<w> <h>\n<maxval>\n<raw rgb data>"
-		local s, e, w_str, h_str, maxval_str = ppm:find("P6%s+(%d+)%s+(%d+)%s+(%d+)%s")
-		if not s then
-			debug.log("poll: failed to parse PPM header for %s", uid)
-			goto continue
-		end
-		local w = tonumber(w_str)
-		local h = tonumber(h_str)
-		local raw_start = e + 1
-
-		-- Extract raw RGB bytes (top-down, 3 bytes/pixel)
-		local rgb_bytes = ppm:sub(raw_start, raw_start + w * h * 3 - 1)
-
-		-- Convert RGB (top-down) to BGRA (bottom-up) via FFI
-		local src = ffi.cast("const unsigned char*", rgb_bytes)
-		local dst = ffi.new("unsigned char[?]", w * h * 4)
-
-		for row = 0, h - 1 do
-			local ppm_off = (h - 1 - row) * w * 3
-			local bmp_off = row * w * 4
-			for col = 0, w - 1 do
-				local si = ppm_off + col * 3
-				local di = bmp_off + col * 4
-				dst[di] = src[si + 2]
-				dst[di + 1] = src[si + 1]
-				dst[di + 2] = src[si]
-				dst[di + 3] = 255
-			end
-		end
-
-		-- Build 54-byte BMP header (32-bit, uncompressed, bottom-up)
+	local function build_bmp_header(w, h)
 		local pixel_size = w * h * 4
 		local file_size = 54 + pixel_size
-
-		local bmp_header = "BM"
+		return "BM"
 			.. u32le(file_size)
 			.. u32le(0)
 			.. u32le(54)
@@ -438,22 +394,80 @@ local function poll_screenshots()
 			.. u32le(0)
 			.. u32le(0)
 			.. u32le(0)
+	end
 
-		-- Assemble complete BMP: header + pixel data
-		local bmp = bmp_header .. ffi.string(dst, pixel_size)
+	while true do
+		local msg = shot_channel:pop()
+		if not msg then
+			break
+		end
 
-		-- Create image from BMP bytes (proven working path in this LÖVE build)
-		local img = love.graphics.newImage(love.data.newByteData(bmp))
-		if not img then
-			debug.log("poll: newImage failed for %dx%d %s", w, h, uid)
+		if msg.type ~= "screenshot" then
 			goto continue
 		end
 
-		-- Attach to the matching gui_screen
-		for _, gs in ipairs(gui_screens) do
-			if gs.screen.uid == uid then
-				gs.preview = img
-				break
+		local uid = msg.uid
+		local payload = msg.data
+
+		local img
+		local ppm_str
+		if type(payload) == "table" and payload.format == "bgra" then
+			-- Native Wayland capture: data is already BGRA
+			local w, h = payload.width, payload.height
+			local bmp = build_bmp_header(w, h) .. payload.data
+			img = love.graphics.newImage(love.data.newByteData(bmp))
+			if not img then
+				debug.log("poll: native newImage failed for %dx%d %s", w, h, uid)
+			end
+		elseif type(payload) == "table" and payload.format == "ppm" then
+			-- Fallback: PPM table from capture_native
+			ppm_str = payload.data
+		elseif type(payload) == "string" then
+			-- Fallback: raw PPM string
+			ppm_str = payload
+		end
+
+		if ppm_str then
+			-- Fallback: PPM string from grim
+			local s, e, w_str, h_str, maxval_str = ppm_str:find("P6%s+(%d+)%s+(%d+)%s+(%d+)%s")
+			if s then
+				local w = tonumber(w_str)
+				local h = tonumber(h_str)
+				local raw_start = e + 1
+				local rgb_bytes = ppm_str:sub(raw_start, raw_start + w * h * 3 - 1)
+
+				-- Convert RGB (top-down) to BGRA (bottom-up) via FFI
+				local src = ffi.cast("const unsigned char*", rgb_bytes)
+				local dst = ffi.new("unsigned char[?]", w * h * 4)
+				for row = 0, h - 1 do
+					local ppm_off = (h - 1 - row) * w * 3
+					local bmp_off = row * w * 4
+					for col = 0, w - 1 do
+						local si = ppm_off + col * 3
+						local di = bmp_off + col * 4
+						dst[di] = src[si + 2]
+						dst[di + 1] = src[si + 1]
+						dst[di + 2] = src[si]
+						dst[di + 3] = 255
+					end
+				end
+
+				local bmp = build_bmp_header(w, h) .. ffi.string(dst, w * h * 4)
+				img = love.graphics.newImage(love.data.newByteData(bmp))
+				if not img then
+					debug.log("poll: PPM newImage failed for %dx%d %s", w, h, uid)
+				end
+			else
+				debug.log("poll: failed to parse PPM header for %s", uid)
+			end
+		end
+
+		if img then
+			for _, gs in ipairs(gui_screens) do
+				if gs.screen.uid == uid then
+					gs.preview = img
+					break
+				end
 			end
 		end
 
