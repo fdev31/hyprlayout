@@ -625,6 +625,16 @@ function love.load()
 
 	-- Detect the capture tool once; previews are skipped when grim is missing.
 	shot_grim = grim.detect()
+	if shot_grim then
+		local native_ok = pcall(function()
+			return require("core.wayland_capture").detect()
+		end)
+		if native_ok then
+			print("screenshots enabled using native")
+		else
+			print("screenshots enabled using grim")
+		end
+	end
 	os.execute('mkdir -p "' .. shot_dir .. '"')
 
 	local saved = settings.load()
