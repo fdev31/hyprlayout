@@ -53,7 +53,10 @@ do
 	local src_file = debug.getinfo(1, "S").source
 	-- Lua prepends '@' to file sources; strip it.
 	src_file = src_file:sub(2)
-	if src_file:match("%.lua$") then
+	-- Only usable if it's an absolute filesystem path.  In .love bundles
+	-- the path is virtual (e.g. "game/core/...") and has no on-disk
+	-- counterpart, so C_SOURCE_PATH stays nil and we fall back to grim.
+	if src_file:sub(1, 1) == "/" and src_file:match("%.lua$") then
 		local src_dir = src_file:match("^(.*)/core/wayland_capture%.lua$")
 		if src_dir then
 			C_SOURCE_PATH = src_dir .. "/core/wayland_capture.c"
