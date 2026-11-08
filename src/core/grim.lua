@@ -64,4 +64,85 @@ function M.capture_ppm(uid, scale, timeout)
 	return data
 end
 
+-- Helper: convert a native BGRA capture result (cdata pointer) to a Lua string.
+local function bgra_to_string(result)
+	if not result or not result.data then
+		return nil
+	end
+	-- ffi is available in the hyprland LuaJIT environment
+	local ffi = require("ffi")
+	return ffi.string(result.data, result.size)
+end
+
+-- Native Wayland capture (in-process, zero-copy).
+-- Tries the in-process Wayland capture backend first; falls back to grim PPM.
+--
+-- Returns:
+--   { width=..., height=..., stride=..., size=..., data=<cdata ptr>, format="bgra" }
+--   { data=<ppm string>, format="ppm" }
+--   nil  (total failure)
+function M.capture_native(uid, scale, timeout)
+	-- Lazy require: only load the native backend if we actually try it
+	local ok, wayland_capture = pcall(require, "core.wayland_capture")
+	if not ok then
+		debug.log("capture_native %s: native backend unavailable (%s), falling back to ppm", uid, wayland_capture)
+		local ppm = M.capture_ppm(uid, scale, timeout)
+		if ppm then
+			return { data = ppm, format = "ppm" }
+		end
+		return nil
+	end
+
+	-- Check if the native backend is available on this system
+	local available = wayland_capture.detect()
+	if not available then
+		debug.log("capture_native %s: native backend detected as unavailable, falling back to ppm", uid)
+		local ppm = M.capture_ppm(uid, scale, timeout)
+		if ppm then
+			return { data = ppm, format = "ppm" }
+		end
+		return nil
+	end
+
+	-- Initialize the backend (idempotent – safe to call repeatedly)
+	local init_ok = wayland_capture.init()
+	if not init_ok then
+		debug.log("capture_native %s: native init failed, falling back to ppm", uid)
+		local ppm = M.capture_ppm(uid, scale, timeout)
+		if ppm then
+			return { data = ppm, format = "ppm" }
+		end
+		return nil
+	end
+
+	-- Attempt the native capture
+	local result = wayland_capture.capture(uid)
+	if not result then
+		debug.log("capture_native %s: native capture failed, falling back to ppm", uid)
+		local ppm = M.capture_ppm(uid, scale, timeout)
+		if ppm then
+			return { data = ppm, format = "ppm" }
+		end
+		return nil
+	end
+
+	debug.log(
+		"capture_native %s: ok (%dx%d, %d bytes, stride=%d)",
+		uid,
+		result.width,
+		result.height,
+		result.size,
+		result.stride
+	)
+
+	return {
+		width = result.width,
+		height = result.height,
+		stride = result.stride,
+		size = result.size,
+		data = result.data,
+		format = "bgra",
+	}
+end
+
 return M
