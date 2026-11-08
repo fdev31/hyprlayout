@@ -17,36 +17,61 @@
 
 /* ------------------------------------------------------------------
  * Protocol interface definitions (manual, no code generation)
+ *
+ * The types field in struct wl_message is `const struct wl_interface **`.
+ * For each argument in the signature, there is a corresponding entry in
+ * the types array: a pointer to the wl_interface for `o`/`n` args, or
+ * NULL for primitive types (i, u, f, s, a, h).
  * ------------------------------------------------------------------ */
 
-static const struct wl_message ext_image_capture_v1_methods[] = {
-    { "create_output", "o&", 1 },
+/* linux_dmabuf_buffer (no object dependencies) */
+static const struct wl_interface *dmabuf_parameters_types[] = {
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL  /* h u u u u u u */
 };
-static const struct wl_interface ext_image_capture_v1_interface = {
-    "ext_image_capture_v1", 1, 1, ext_image_capture_v1_methods, 0, NULL
+static const struct wl_message linux_dmabuf_buffer_events[] = {
+    { "parameters", "huiiuuu", dmabuf_parameters_types },
 };
-
-static const struct wl_message zxdg_output_v1_methods[] = {
-    { "capture_frame", "&", 0 },
-    { "destroy", "", 0 },
-};
-static const struct wl_interface zxdg_output_v1_interface = {
-    "zxdg_output_v1", 1, 2, zxdg_output_v1_methods, 0, NULL
+static const struct wl_interface linux_dmabuf_buffer_interface = {
+    "linux_dmabuf_buffer", 1, 0, NULL, 1, linux_dmabuf_buffer_events
 };
 
+/* zxdg_toplevel_capture_v1 (depends on linux_dmabuf_buffer) */
+static const struct wl_interface *frame_buffer_types[] = {
+    &linux_dmabuf_buffer_interface,
+    NULL
+};
 static const struct wl_message zxdg_toplevel_capture_v1_events[] = {
-    { "buffer", "n", 1 },
-    { "done", "", 0 },
+    { "buffer", "o", frame_buffer_types },
+    { "done", "", NULL },
 };
 static const struct wl_interface zxdg_toplevel_capture_v1_interface = {
     "zxdg_toplevel_capture_v1", 1, 0, NULL, 2, zxdg_toplevel_capture_v1_events
 };
 
-static const struct wl_message linux_dmabuf_buffer_events[] = {
-    { "parameters", "iuiiiiu", 7 },
+/* zxdg_output_v1 (depends on zxdg_toplevel_capture_v1) */
+static const struct wl_interface *capture_frame_types[] = {
+    &zxdg_toplevel_capture_v1_interface,
+    NULL
 };
-static const struct wl_interface linux_dmabuf_buffer_interface = {
-    "linux_dmabuf_buffer", 1, 0, NULL, 1, linux_dmabuf_buffer_events
+static const struct wl_message zxdg_output_v1_methods[] = {
+    { "capture_frame", "n", capture_frame_types },
+    { "destroy", "", NULL },
+};
+static const struct wl_interface zxdg_output_v1_interface = {
+    "zxdg_output_v1", 1, 2, zxdg_output_v1_methods, 0, NULL
+};
+
+/* ext_image_capture_v1 (depends on wl_output and zxdg_output_v1) */
+static const struct wl_interface *create_output_types[] = {
+    &wl_output_interface,
+    &zxdg_output_v1_interface,
+    NULL
+};
+static const struct wl_message ext_image_capture_v1_methods[] = {
+    { "create_output", "on", create_output_types },
+};
+static const struct wl_interface ext_image_capture_v1_interface = {
+    "ext_image_capture_v1", 1, 1, ext_image_capture_v1_methods, 0, NULL
 };
 
 /* ------------------------------------------------------------------
@@ -76,38 +101,38 @@ static int    g_frame_done = 0;
 static void registry_global(void *data, struct wl_registry *reg,
                              uint32_t name, const char *interface, uint32_t version)
 {
-    (void)data; (void)name; (void)version;
+    (void)data; (void)version;
     if (strcmp(interface, "ext_image_capture_v1") == 0) {
-        g_capture_v1 = wl_registry_bind(reg, name,
+        g_capture_v1 = (struct wl_proxy *)wl_registry_bind(reg, name,
                                          &ext_image_capture_v1_interface, 1);
     } else if (strcmp(interface, "wl_output") == 0) {
         if (!g_output) {
-            g_output = wl_registry_bind(reg, name, &wl_output_interface, 2);
+            g_output = (struct wl_output *)wl_registry_bind(reg, name,
+                                                              &wl_output_interface, 2);
         }
     }
 }
 
 static const struct wl_registry_listener registry_listener = {
-    .global = registry_global,
+    .global        = registry_global,
+    .global_remove = NULL,
 };
 
 static void output_geometry(void *data, struct wl_output *out,
                             int32_t x, int32_t y, int32_t w, int32_t h,
                             int32_t subpixel, const char *make, const char *model,
-                            const char *type, int32_t mm_w, int32_t mm_h,
-                            int32_t refresh, int32_t scale)
+                            int32_t transform)
 {
     (void)data; (void)out; (void)x; (void)y; (void)w; (void)h;
-    (void)subpixel; (void)make; (void)model; (void)type;
-    (void)mm_w; (void)mm_h; (void)refresh; (void)scale;
+    (void)subpixel; (void)make; (void)model; (void)transform;
 }
 
 static void output_mode(void *data, struct wl_output *out,
-                        int32_t flags, int32_t w, int32_t h,
-                        int32_t refresh, int32_t current)
+                        uint32_t flags, int32_t w, int32_t h,
+                        int32_t refresh)
 {
     (void)data; (void)out; (void)flags; (void)w; (void)h;
-    (void)refresh; (void)current;
+    (void)refresh;
 }
 
 static void output_done(void *data, struct wl_output *out)
@@ -116,30 +141,28 @@ static void output_done(void *data, struct wl_output *out)
 }
 
 static const struct wl_output_listener output_listener = {
-    .geometry = output_geometry,
-    .mode     = output_mode,
-    .done     = output_done,
+    .geometry    = output_geometry,
+    .mode        = output_mode,
+    .done        = output_done,
+    .scale       = NULL,
+    .name        = NULL,
+    .description = NULL,
 };
 
-/* Forward declaration */
-static const struct wl_listener dmabuf_buffer_listener;
+/* Custom listener structs for our protocol objects.
+ * wl_proxy_add_listener expects `void (**)(void)` as the implementation
+ * array, so we cast our listener structs to that type (same pattern
+ * used by the generated protocol wrappers). */
+struct frame_listener {
+    void (*buffer)(void *data, struct wl_proxy *frame, struct wl_proxy *buffer);
+    void (*done)(void *data, struct wl_proxy *frame);
+};
 
-static void frame_buffer(void *data, struct wl_proxy *frame,
-                          struct wl_proxy *buffer)
-{
-    (void)data; (void)frame;
-    wl_proxy_add_listener(buffer, &dmabuf_buffer_listener, NULL);
-}
-
-static void frame_done(void *data, struct wl_proxy *frame)
-{
-    (void)data; (void)frame;
-    g_frame_done = 1;
-}
-
-static const struct wl_listener frame_listener = {
-    .buffer = frame_buffer,
-    .done   = frame_done,
+struct dmabuf_listener {
+    void (*parameters)(void *data, struct wl_proxy *buffer,
+                        int32_t fd, uint32_t width, uint32_t height,
+                        uint32_t format, uint32_t offset,
+                        uint32_t stride, uint32_t plane_idx);
 };
 
 static void dmabuf_parameters(void *data, struct wl_proxy *buffer,
@@ -155,8 +178,26 @@ static void dmabuf_parameters(void *data, struct wl_proxy *buffer,
     g_format = (int)format;
 }
 
-static const struct wl_listener dmabuf_buffer_listener = {
+static const struct dmabuf_listener dmabuf_buffer_listener = {
     .parameters = dmabuf_parameters,
+};
+
+static void frame_buffer(void *data, struct wl_proxy *frame,
+                          struct wl_proxy *buffer)
+{
+    (void)data; (void)frame;
+    wl_proxy_add_listener(buffer, (void (**)(void)) &dmabuf_buffer_listener, NULL);
+}
+
+static void frame_done(void *data, struct wl_proxy *frame)
+{
+    (void)data; (void)frame;
+    g_frame_done = 1;
+}
+
+static const struct frame_listener frame_listener = {
+    .buffer = frame_buffer,
+    .done   = frame_done,
 };
 
 /* ------------------------------------------------------------------
@@ -186,7 +227,7 @@ int wlcap_init(void)
 
     if (!g_capture_v1) {
         wl_display_disconnect(g_display);
-        g_display = NULL;
+        g_display  = NULL;
         g_registry = NULL;
         return -1;
     }
@@ -235,19 +276,21 @@ int wlcap_capture(const char *output_name, int *w, int *h,
     g_frame_done = 0;
 
     /* Create the zxdg_output for capture */
-    struct wl_proxy *zxdg_output = wl_proxy_marshal(g_capture_v1, 0, g_output);
+    struct wl_proxy *zxdg_output = wl_proxy_marshal_constructor(
+        g_capture_v1, 0, &zxdg_output_v1_interface, g_output);
     if (!zxdg_output)
         return -1;
 
     /* Request a frame capture */
-    struct wl_proxy *frame = wl_proxy_marshal(zxdg_output, 0);
+    struct wl_proxy *frame = wl_proxy_marshal_constructor(
+        zxdg_output, 0, &zxdg_toplevel_capture_v1_interface);
     if (!frame) {
         wl_proxy_destroy(zxdg_output);
         return -1;
     }
 
     /* Set up listener on the frame */
-    wl_proxy_add_listener(frame, &frame_listener, NULL);
+    wl_proxy_add_listener(frame, (void (**)(void)) &frame_listener, NULL);
 
     /* Flush and dispatch until we get the frame */
     wl_display_flush(g_display);

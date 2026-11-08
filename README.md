@@ -39,6 +39,12 @@ hyprlayout install
 - Linux (developed and tested on Arch)
 - [Hyprland](https://hyprland.org/) running — the app reads and applies
   monitor configuration through `hyprctl`
+- [Umbriel](https://github.com/umbrielwm/umbriel) (wlroots-based Wayland
+  compositor) — supported via its native CLI (`umbriel outputs --json`) for
+  state reading and `wlr-randr` for configuration. Provides richer state than
+  generic wlr-randr: HDR, bit depth, VRR, SDR white point. Detection is
+  automatic: if the `umbriel` CLI is available and responds, the umbriel
+  backend is selected.
 - [LÖVE 11.5](https://love2d.org/) — to run from source or the `.love`
   archive. The self-contained executable (below) needs no LÖVE install.
 

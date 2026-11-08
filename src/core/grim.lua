@@ -64,16 +64,6 @@ function M.capture_ppm(uid, scale, timeout)
 	return data
 end
 
--- Helper: convert a native BGRA capture result (cdata pointer) to a Lua string.
-local function bgra_to_string(result)
-	if not result or not result.data then
-		return nil
-	end
-	-- ffi is available in the hyprland LuaJIT environment
-	local ffi = require("ffi")
-	return ffi.string(result.data, result.size)
-end
-
 -- Native Wayland capture (in-process, zero-copy).
 -- Tries the in-process Wayland capture backend first; falls back to grim PPM.
 --

@@ -184,6 +184,195 @@ check("screens: [2] position x", scr[2].position[1], 3840)
 check("screens: [2] scale", scr[2].scale, 1.25)
 check("screens: [3] inactive", scr[3].active, false)
 
+-- --- umbriel ---------------------------------------------------------------
+
+local umbriel = require("core.backends.umbriel")
+local json_ok, json = pcall(require, "dkjson")
+if not json_ok then
+	print("SKIP umbriel: dkjson not available")
+	json = nil
+end
+
+if json then
+	local UMBRIEL_JSON = [[
+[
+  {
+    "active_workspace": "DP-1:3",
+    "adaptive_sync": null,
+    "config_name": "Microstep MAG342CQPV DB6H513700137",
+    "description": "Microstep MAG342CQPV DB6H513700137 (DP-1)",
+    "direct_scanout": {
+        "active": false, "commit_seq": 137942, "commits": 137942,
+        "reason": "composited", "scanout_commits": 0, "window": null
+    },
+    "enabled": true,
+    "focused": true,
+    "hdr_active": false,
+    "logical_size": {"height": 1440, "width": 3440},
+    "make": "Microstep",
+    "model": "MAG342CQPV",
+    "modes": [
+      {"current": true, "height": 1440, "preferred": true, "refresh_mhz": 59999, "width": 3440},
+      {"current": false, "height": 1440, "preferred": false, "refresh_mhz": 99998, "width": 3440},
+      {"current": false, "height": 1440, "preferred": false, "refresh_mhz": 50000, "width": 3440},
+      {"current": false, "height": 1440, "preferred": false, "refresh_mhz": 99793, "width": 2560},
+      {"current": false, "height": 1440, "preferred": false, "refresh_mhz": 60000, "width": 2560}
+    ],
+    "name": "DP-1",
+    "physical_size": {"height_mm": 330, "width_mm": 790},
+    "position": {"x": 0, "y": 0},
+    "powered": true,
+    "scale": 1.0,
+    "serial": "DB6H513700137",
+    "transform": "normal",
+    "usable_area": {"height": 1406, "width": 3440, "x": 0, "y": 34}
+  },
+  {
+    "name": "DP-2",
+    "description": "Samsung Odyssey G7 (DP-2)",
+    "enabled": true,
+    "focused": false,
+    "hdr_active": true,
+    "logical_size": {"height": 1440, "width": 2560},
+    "modes": [
+      {"current": true, "height": 1440, "preferred": true, "refresh_mhz": 143980, "width": 2560},
+      {"current": false, "height": 1080, "preferred": false, "refresh_mhz": 59994, "width": 1920}
+    ],
+    "position": {"x": 3440, "y": 0},
+    "scale": 1.0,
+    "transform": "90"
+  },
+  {
+    "name": "HDMI-A-1",
+    "description": "LG Electronics (HDMI-A-1)",
+    "enabled": false,
+    "focused": false,
+    "hdr_active": false,
+    "logical_size": {"height": 1080, "width": 1920},
+    "modes": [
+      {"current": true, "height": 1080, "preferred": true, "refresh_mhz": 59994, "width": 1920}
+    ],
+    "position": {"x": 0, "y": 0},
+    "scale": 1.0,
+    "transform": "normal"
+  }
+]
+]]
+
+	local ok, data = pcall(json.decode, UMBRIEL_JSON)
+	assert(ok, "failed to decode umbriel fixture JSON")
+
+	local umbriel_mons = {}
+	for i = 1, #data do
+		table.insert(umbriel_mons, umbriel._parse(data[i]))
+	end
+
+	-- Parse: monitor count and per-monitor fields.
+	check("umbriel: monitor count", #umbriel_mons, 3)
+
+	check("umbriel: [1] name", umbriel_mons[1].name, "DP-1")
+	check("umbriel: [1] description", umbriel_mons[1].description, "Microstep MAG342CQPV DB6H513700137 (DP-1)")
+	check("umbriel: [1] disabled", umbriel_mons[1].disabled, false)
+	check("umbriel: [1] focused", umbriel_mons[1].focused, true)
+	check("umbriel: [1] width", umbriel_mons[1].width, 3440)
+	check("umbriel: [1] height", umbriel_mons[1].height, 1440)
+	check("umbriel: [1] refreshRate", umbriel_mons[1].refreshRate, 59.999)
+	check("umbriel: [1] scale", umbriel_mons[1].scale, 1.0)
+	check("umbriel: [1] transform", umbriel_mons[1].transform, 0)
+	check("umbriel: [1] x", umbriel_mons[1].x, 0)
+	check("umbriel: [1] y", umbriel_mons[1].y, 0)
+	check("umbriel: [1] availableModes count", #umbriel_mons[1].availableModes, 5)
+	check("umbriel: [1] availableModes[1]", umbriel_mons[1].availableModes[1], "3440x1440@60.00")
+	check("umbriel: [1] availableModes[4]", umbriel_mons[1].availableModes[4], "2560x1440@99.79")
+	check("umbriel: [1] currentFormat", umbriel_mons[1].currentFormat, "XRGB8888")
+	check("umbriel: [1] colorManagementPreset", umbriel_mons[1].colorManagementPreset, "srgb")
+
+	check("umbriel: [2] name", umbriel_mons[2].name, "DP-2")
+	check("umbriel: [2] transform", umbriel_mons[2].transform, 1)
+	check("umbriel: [2] currentFormat", umbriel_mons[2].currentFormat, "XR30")
+	check("umbriel: [2] colorManagementPreset", umbriel_mons[2].colorManagementPreset, "hdr")
+	check("umbriel: [2] x", umbriel_mons[2].x, 3440)
+	check("umbriel: [2] y", umbriel_mons[2].y, 0)
+	check("umbriel: [2] refreshRate", umbriel_mons[2].refreshRate, 143.98)
+
+	check("umbriel: [3] disabled", umbriel_mons[3].disabled, true)
+	check("umbriel: [3] name", umbriel_mons[3].name, "HDMI-A-1")
+
+	-- Edge cases.
+	-- An empty JSON array decodes to an empty table → zero monitors.
+	local empty_data = json.decode("[]")
+	check("umbriel: empty JSON array yields 0 entries", #empty_data, 0)
+	-- Invalid JSON decodes to nil (dkjson returns nil, errmsg on failure).
+	local _, data_inv = pcall(json.decode, "not json")
+	check("umbriel: invalid JSON yields nil", data_inv, nil)
+	-- A single entry with no fields still produces a valid (disabled) monitor.
+	local empty_mon = umbriel._parse({})
+	check("umbriel: bare entry has a name", empty_mon.name, "unknown")
+	check("umbriel: bare entry is disabled", empty_mon.disabled, true)
+
+	-- Missing description falls back to the name.
+	local no_desc = umbriel._parse({ name = "VGA-1", enabled = true })
+	check("umbriel: missing description uses name", no_desc.description, "VGA-1")
+
+	-- config_to_args.
+	check(
+		"umbriel: config_to_args enabled",
+		umbriel._config_to_args({
+			name = "DP-1",
+			enabled = true,
+			width = 3440,
+			height = 1440,
+			refresh = 60,
+			x = 0,
+			y = 0,
+			scale = 1.0,
+			transform = 0,
+		}),
+		"--output DP-1 --on --mode 3440x1440@59.999Hz --pos 0,0 --scale 1.000000 --transform normal"
+	)
+	check(
+		"umbriel: config_to_args disabled",
+		umbriel._config_to_args({ name = "DP-2", enabled = false }),
+		"--output DP-2 --off"
+	)
+	check(
+		"umbriel: config_to_args transform 90",
+		umbriel._config_to_args({
+			name = "DP-1",
+			enabled = true,
+			width = 3440,
+			height = 1440,
+			refresh = 60,
+			x = 0,
+			y = 0,
+			transform = 1,
+		}),
+		"--output DP-1 --on --mode 3440x1440@59.999Hz --pos 0,0 --transform 90"
+	)
+	check(
+		"umbriel: config_to_args scale",
+		umbriel._config_to_args({
+			name = "DP-1",
+			enabled = true,
+			width = 3440,
+			height = 1440,
+			refresh = 60,
+			x = 0,
+			y = 0,
+			scale = 1.0,
+		}),
+		"--output DP-1 --on --mode 3440x1440@59.999Hz --pos 0,0 --scale 1.000000 --transform normal"
+	)
+
+	-- Integration with core.screens.
+	local uscr = screens.from_monitors(umbriel_mons)
+	check("umbriel screens: count", #uscr, 3)
+	check("umbriel screens: [1] uid", uscr[1].uid, "DP-1")
+	check("umbriel screens: [1] available modes", #uscr[1].available, 5)
+	check("umbriel screens: [2] hdr_enabled", uscr[2].hdr_enabled, true)
+	check("umbriel screens: [3] active", uscr[3].active, false)
+end
+
 -- ---------------------------------------------------------------------------
 
 if failures > 0 then

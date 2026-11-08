@@ -429,7 +429,7 @@ local function poll_screenshots()
 
 		if ppm_str then
 			-- Fallback: PPM string from grim
-			local s, e, w_str, h_str, maxval_str = ppm_str:find("P6%s+(%d+)%s+(%d+)%s+(%d+)%s")
+			local s, e, w_str, h_str, _ = ppm_str:find("P6%s+(%d+)%s+(%d+)%s+(%d+)%s")
 			if s then
 				local w = tonumber(w_str)
 				local h = tonumber(h_str)

@@ -11,6 +11,10 @@ local candidates = {
 	-- its probe returns false and the facade falls through to the rest.
 	require("core.backends.hl"),
 	require("core.backends.hyprctl"),
+	-- umbriel comes before wlr-randr: on an Umbriel session `umbriel outputs --json`
+	-- provides richer state (HDR, bit depth, VRR) than wlr-randr text. On other
+	-- wlroots compositors the umbriel probe fails and wlr-randr takes over.
+	require("core.backends.umbriel"),
 	-- wlr-randr comes before xrandr: on a wlroots compositor XWayland usually
 	-- answers `xrandr` too, but it can only see the rootless X screen, so the
 	-- native Wayland protocol has to win.
