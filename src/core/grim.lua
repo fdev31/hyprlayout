@@ -78,6 +78,7 @@ function M.capture_native(uid, scale, timeout)
 		debug.log("capture_native %s: native backend unavailable (%s), falling back to ppm", uid, wayland_capture)
 		local ppm = M.capture_ppm(uid, scale, timeout)
 		if ppm then
+			debug.log("screenshot %s: backend=grim-ppm", uid)
 			return { data = ppm, format = "ppm" }
 		end
 		return nil
@@ -89,6 +90,7 @@ function M.capture_native(uid, scale, timeout)
 		debug.log("capture_native %s: native backend detected as unavailable, falling back to ppm", uid)
 		local ppm = M.capture_ppm(uid, scale, timeout)
 		if ppm then
+			debug.log("screenshot %s: backend=grim-ppm", uid)
 			return { data = ppm, format = "ppm" }
 		end
 		return nil
@@ -100,6 +102,7 @@ function M.capture_native(uid, scale, timeout)
 		debug.log("capture_native %s: native init failed, falling back to ppm", uid)
 		local ppm = M.capture_ppm(uid, scale, timeout)
 		if ppm then
+			debug.log("screenshot %s: backend=grim-ppm", uid)
 			return { data = ppm, format = "ppm" }
 		end
 		return nil
@@ -111,19 +114,13 @@ function M.capture_native(uid, scale, timeout)
 		debug.log("capture_native %s: native capture failed, falling back to ppm", uid)
 		local ppm = M.capture_ppm(uid, scale, timeout)
 		if ppm then
+			debug.log("screenshot %s: backend=grim-ppm", uid)
 			return { data = ppm, format = "ppm" }
 		end
 		return nil
 	end
 
-	debug.log(
-		"capture_native %s: ok (%dx%d, %d bytes, stride=%d)",
-		uid,
-		result.width,
-		result.height,
-		result.size,
-		result.stride
-	)
+	debug.log("screenshot %s: backend=native (%dx%d, %d bytes)", uid, result.width, result.height, result.size)
 
 	return {
 		width = result.width,
