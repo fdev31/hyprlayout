@@ -329,14 +329,26 @@ local function start_screenshot_thread()
 		debug.log("screenshot: no capture backend available, skipping")
 		return
 	end
-	-- One capture thread per active screen so all monitors are grabbed in parallel.
+	-- Drop finished threads from the previous round; keep live ones so we
+	-- don't spawn a second thread for the same monitor.  This build's Thread
+	-- API has no join(), so liveness is tracked with isRunning().
+	local live = {}
+	for _, entry in ipairs(shot_threads) do
+		if entry.t:isRunning() then
+			live[entry.uid] = true
+		end
+	end
 	shot_threads = {}
+
+	-- One capture thread per active screen so all monitors are grabbed in parallel.
 	for _, gs in ipairs(gui_screens) do
 		local scr = gs.screen
 		if not scr.active then
 			debug.log("screenshot: %s inactive, skipping", scr.uid)
 		elseif not scr.mode then
 			debug.log("screenshot: %s has no mode, skipping", scr.uid)
+		elseif live[scr.uid] then
+			debug.log("screenshot: %s already has a live thread, skipping", scr.uid)
 		else
 			-- Capture at the size the preview is actually displayed at (the UI canvas scale).
 			-- grim does the downscaling at capture time via -s, so we only need the ratio.
@@ -364,39 +376,12 @@ local function start_screenshot_thread()
 				currentFormat = scr.current_format,
 				c_source_path = C_SOURCE_PATH,
 			}, shot_dir, scale, SCREENSHOT_INTERVAL)
-			table.insert(shot_threads, t)
+			table.insert(shot_threads, { uid = scr.uid, t = t })
 		end
 	end
 end
 
 local function poll_screenshots()
-	local function u32le(n)
-		return string.char(n & 0xFF, (n >> 8) & 0xFF, (n >> 16) & 0xFF, (n >> 24) & 0xFF)
-	end
-	local function u16le(n)
-		return string.char(n & 0xFF, (n >> 8) & 0xFF)
-	end
-
-	local function build_bmp_header(w, h)
-		local pixel_size = w * h * 4
-		local file_size = 54 + pixel_size
-		return "BM"
-			.. u32le(file_size)
-			.. u32le(0)
-			.. u32le(54)
-			.. u32le(40)
-			.. u32le(w)
-			.. u32le(h)
-			.. u16le(1)
-			.. u16le(32)
-			.. u32le(0)
-			.. u32le(pixel_size)
-			.. u32le(0)
-			.. u32le(0)
-			.. u32le(0)
-			.. u32le(0)
-	end
-
 	while true do
 		local msg = shot_channel:pop()
 		if not msg then
@@ -411,16 +396,10 @@ local function poll_screenshots()
 		local payload = msg.data
 
 		local img
-		if type(payload) == "table" and payload.format == "bgra" then
-			-- Native Wayland capture: data is already BGRA
-			local w, h = payload.width, payload.height
-			local bmp = build_bmp_header(w, h) .. payload.data
-			img = love.graphics.newImage(love.data.newByteData(bmp))
-			if not img then
-				debug.log("poll: native newImage failed for %dx%d %s", w, h, uid)
-			end
-		elseif type(payload) == "table" and payload.format == "png" then
-			-- Grim PNG: read the file and decode in-memory
+		if type(payload) == "table" and (payload.format == "png" or payload.format == "bmp") then
+			-- File-based capture (grim PNG or native BMP): read from disk.
+			-- The worker thread writes the image file; we only receive the
+			-- path through the channel, avoiding a multi-MB pipe transfer.
 			local f = io.open(payload.path, "rb")
 			if f then
 				local bytes = f:read("*a")
@@ -428,7 +407,7 @@ local function poll_screenshots()
 				if bytes then
 					img = love.graphics.newImage(love.data.newByteData(bytes))
 					if not img then
-						debug.log("poll: PNG newImage failed for %s", uid)
+						debug.log("poll: %s newImage failed for %s", payload.format, uid)
 					end
 				end
 				os.remove(payload.path)
@@ -671,8 +650,8 @@ function love.quit()
 	if gui_initialized then
 		save_settings()
 	end
-	for _, t in pairs(shot_threads) do
-		t:wait()
+	for _, entry in pairs(shot_threads) do
+		entry.t:wait()
 	end
 	-- Shut down the native capture child process (if running)
 	pcall(function()

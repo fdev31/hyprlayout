@@ -157,16 +157,44 @@ local function spawn_child()
 		return false
 	end
 
-	-- Create unique FIFO names (per-thread module instance).
-	-- Use a random component to avoid collisions between threads.
+	-- Create unique FIFO names.  LÖVE seeds every thread's RNG identically,
+	-- so math.random alone collides across threads (same first value).  We
+	-- retry with a fresh tag when mkfifo reports the name already exists,
+	-- and we never rm -f a name we didn't create, so concurrent threads
+	-- cannot delete each other's FIFOs.
 	spawn_id = spawn_id + 1
-	local tag = string.format("%d_%d", spawn_id, math.random(100000, 999999))
-	fifo_in = "/tmp/wlcap_in_" .. tag
-	fifo_out = "/tmp/wlcap_out_" .. tag
+	local base = string.format("%d_%d", spawn_id, os.time())
+	local tag
+	for attempt = 1, 32 do
+		local t = string.format("%s_%d", base, attempt)
+		local fi = "/tmp/wlcap_in_" .. t
+		local fo = "/tmp/wlcap_out_" .. t
+		local rc = os.execute("mkfifo " .. fi .. " 2>/dev/null && mkfifo " .. fo .. " 2>/dev/null")
+		if rc == 0 then
+			tag = t
+			fifo_in = fi
+			fifo_out = fo
+			break
+		end
+	end
+	if not tag then
+		debug.log("wayland_capture: could not create unique FIFOs")
+		return false
+	end
 
-	-- Clean up any stale FIFOs from a previous crashed instance.
-	os.execute("rm -f " .. fifo_in .. " " .. fifo_out)
-	os.execute("mkfifo " .. fifo_in .. " " .. fifo_out)
+	-- Open fifo_in in read-write mode BEFORE spawning the child.  A plain
+	-- read-open or write-open of a FIFO blocks until the other end is open,
+	-- so the shell subshell's "< fifo_in" would deadlock: it waits for a
+	-- writer, and we wait for the child to produce output on fifo_out.
+	-- O_RDWR does not block, and it satisfies both ends.
+	local fifo_in_rw = io.open(fifo_in, "r+")
+	if not fifo_in_rw then
+		debug.log("wayland_capture: failed to open fifo_in in r+ mode")
+		os.execute("rm -f " .. fifo_in .. " " .. fifo_out)
+		fifo_in = nil
+		fifo_out = nil
+		return false
+	end
 
 	-- Spawn the child in the background via the shell.
 	-- The shell opens the FIFOs (stdin=read, stdout=write) before exec,
@@ -185,6 +213,7 @@ local function spawn_child()
 
 	if not pid_str or not pid_str:match("^%d+$") then
 		debug.log("wayland_capture: failed to spawn child")
+		fifo_in_rw:close()
 		os.execute("rm -f " .. fifo_in .. " " .. fifo_out)
 		fifo_in = nil
 		fifo_out = nil
@@ -192,6 +221,9 @@ local function spawn_child()
 	end
 
 	child_pid = tonumber(pid_str)
+
+	-- Close the r+ handle; the child has its own fd open on fifo_in.
+	fifo_in_rw:close()
 
 	-- The child prints "PROTOCOL <name>" then "READY" once it has
 	-- connected to Wayland and selected a usable capture protocol.
@@ -238,8 +270,9 @@ end
  ------------------------------------------------------------------ ]]
 
 -- Check whether the native backend can be compiled AND the compositor
--- supports the ext_image_copy_capture_v1 protocol.
--- Does NOT spawn the child; that happens in init().
+-- supports a usable capture protocol.  Runs a one-shot probe (the binary
+-- connects to Wayland, prints PROTOCOL + READY, and exits on stdin EOF).
+-- Does NOT spawn the long-lived child; that happens in the worker thread.
 function M.detect()
 	if native_available ~= nil then
 		return native_available
