@@ -633,16 +633,16 @@ function love.load()
 
 	-- Detect the capture backend once; previews are skipped when nothing is available.
 	shot_available = grim.detect()
-	local native_ok, native_available, native_protocol = pcall(function()
+	local native_ok, native_available = pcall(function()
 		local wc = require("core.wayland_capture")
-		return wc.detect(), wc.protocol()
+		return wc.detect()
 	end)
 	if screenshot_backend == "none" then
 		shot_available = false
 		print("screenshots: disabled (--screenshot none)")
 	elseif screenshot_backend == "native" then
 		if native_ok and native_available then
-			print("screenshots: native backend forced (" .. tostring(native_protocol) .. ")")
+			print("screenshots: native backend forced")
 			shot_available = true
 		else
 			print("screenshots: native backend requested but not available")
@@ -656,7 +656,7 @@ function love.load()
 			shot_available = false
 		end
 	elseif native_ok and native_available then
-		print("screenshots: native backend available (" .. tostring(native_protocol) .. ")")
+		print("screenshots: native backend available")
 		shot_available = true
 	elseif shot_available then
 		print("screenshots enabled using grim")

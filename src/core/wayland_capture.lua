@@ -285,44 +285,12 @@ function M.detect()
 		return false
 	end
 
-	-- Probe the compositor by running the binary with stdin closed
-	-- (immediate EOF).  It connects to Wayland, prints "PROTOCOL <name>"
-	-- then "READY" when a usable capture protocol is available, and
-	-- exits 0; it exits 1 when no protocol is usable.
-	local h = io.popen(string.format("timeout 5 %s < /dev/null 2>/dev/null; echo $?", exe))
-	local out = h:read("*a")
-	h:close()
-
-	local lines = {}
-	for line in out:gmatch("[^\r\n]+") do
-		table.insert(lines, line)
-	end
-	local rc = lines[#lines]
-	local protocol = nil
-	local ready = false
-	for _, line in ipairs(lines) do
-		local name = line:match("^PROTOCOL (.+)$")
-		if name then
-			protocol = name
-		elseif line == "READY" then
-			ready = true
-		end
-	end
-
-	if rc ~= "0" or not protocol or not ready then
-		debug.log(
-			"wayland_capture: NOT available (rc=%s protocol=%s ready=%s)",
-			tostring(rc),
-			tostring(protocol),
-			tostring(ready)
-		)
-		native_available = false
-		return false
-	end
-
-	native_protocol = protocol
+	-- The binary compiled successfully.  We don't probe the compositor here
+	-- (that would block the main thread for ~2 s on the Wayland connection).
+	-- The worker thread spawns the child and reads the PROTOCOL line; if no
+	-- usable protocol is available the capture fails and falls back to grim.
 	native_available = true
-	debug.log("wayland_capture: available (%s)", protocol)
+	debug.log("wayland_capture: available (compile ok, protocol detected in worker)")
 	return true
 end
 
