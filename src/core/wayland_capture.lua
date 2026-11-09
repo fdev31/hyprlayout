@@ -358,8 +358,9 @@ function M.capture(output_name, scale, downscale)
 	if scale then
 		cmd = cmd .. " " .. scale
 	end
-	if downscale and downscale > 1 then
-		cmd = cmd .. " " .. downscale
+	local ds = tonumber(downscale)
+	if ds and ds > 1 then
+		cmd = cmd .. " " .. ds
 	end
 	cmd = cmd .. "\n"
 
