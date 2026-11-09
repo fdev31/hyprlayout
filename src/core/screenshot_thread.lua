@@ -73,14 +73,9 @@ else
 		end
 	end
 
-	-- The native child (spawned inside capture_native) must be cleaned up
-	-- here: this is a one-shot thread, so without shutdown the child and its
-	-- FIFOs would leak on every interval.  Runs even when the capture fell
-	-- back to grim or failed, since init() may still have spawned the child.
-	local ok2, wc = pcall(require, "core.wayland_capture")
-	if ok2 and wc and wc.shutdown then
-		wc.shutdown()
-	end
+	-- The native child is long-lived (spawned by the main thread's M.start()).
+	-- No shutdown here: the child stays alive between captures so subsequent
+	-- screenshots don't pay the ~2 s Wayland connection cost again.
 
 	if data then
 		debug.log("thread: capture ok for %s (%s)", s.uid, data.format)

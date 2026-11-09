@@ -665,6 +665,14 @@ function love.load()
 	else
 		print("screenshots: disabled (no backend available)")
 	end
+	-- Spawn the native capture child once so it stays alive between
+	-- screenshots.  The ~2 s Wayland connection is a one-time cost;
+	-- subsequent captures are ~100 ms.
+	if shot_available and screenshot_backend ~= "grim" then
+		pcall(function()
+			require("core.wayland_capture").start()
+		end)
+	end
 	os.execute('mkdir -p "' .. shot_dir .. '"')
 
 	local saved = settings.load()
@@ -708,7 +716,7 @@ function love.quit()
 	end
 	-- Shut down the native capture child process (if running)
 	pcall(function()
-		require("core.wayland_capture").shutdown()
+		require("core.wayland_capture").stop()
 	end)
 	-- LÖVE's own shutdown (lua_close) crashes in SDL3's Wayland teardown after a
 	-- monitor reconfiguration, so terminate directly once our cleanup is done.

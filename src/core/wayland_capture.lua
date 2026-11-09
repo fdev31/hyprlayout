@@ -59,6 +59,8 @@ local fifo_out = nil
 local spawn_id = 0
 local native_available = nil -- cached detect() result
 local native_protocol = nil -- protocol name from the child's PROTOCOL line
+local fifo_in_keepalive = nil -- main-thread r+ handle preventing child EOF
+local STATE_FILE = "/tmp/wlcap_state"
 
 --[[ ------------------------------------------------------------------
  Helpers
@@ -300,9 +302,82 @@ function M.protocol()
 	return native_protocol
 end
 
--- Spawn the child process (idempotent – safe to call repeatedly).
-function M.init()
-	return spawn_child()
+-- Spawn the child in the main thread and keep it alive for the app's
+-- lifetime.  Holds an r+ handle on fifo_in to prevent the child from
+-- receiving EOF when worker threads close their write handles.
+-- Writes the FIFO paths to STATE_FILE so worker threads can attach.
+-- Returns true on success.
+function M.start()
+	if running then
+		return true
+	end
+	if not spawn_child() then
+		return false
+	end
+	-- Re-open fifo_in in r+ mode as a keepalive handle.  This prevents
+	-- the child from getting EOF on stdin when worker threads close
+	-- their write handles.  O_RDWR does not block.
+	fifo_in_keepalive = io.open(fifo_in, "r+")
+	-- Write the FIFO paths so worker threads can attach without spawning
+	-- a new child.
+	local sf = io.open(STATE_FILE, "w")
+	if sf then
+		sf:write(fifo_in .. "\n" .. fifo_out .. "\n")
+		sf:close()
+	end
+	debug.log("wayland_capture: started (pid=%d, keepalive open)", child_pid)
+	return true
+end
+
+-- Attach to an existing child (spawned by M.start() in the main thread).
+-- Opens the FIFOs and marks the module as running.  Returns true on success.
+function M.attach()
+	if running then
+		return true
+	end
+	local sf = io.open(STATE_FILE, "r")
+	if not sf then
+		return false
+	end
+	local fi = sf:read("*l")
+	local fo = sf:read("*l")
+	sf:close()
+	if not fi or not fo then
+		return false
+	end
+	read_file = io.open(fo, "r")
+	if not read_file then
+		return false
+	end
+	write_file = io.open(fi, "w")
+	if not write_file then
+		read_file:close()
+		read_file = nil
+		return false
+	end
+	fifo_in = fi
+	fifo_out = fo
+	running = true
+	debug.log("wayland_capture: attached to existing child")
+	return true
+end
+
+-- Stop the child.  Called from the main thread on app exit.
+function M.stop()
+	if not running and not fifo_in_keepalive then
+		return
+	end
+	if write_file then
+		write_file:write("QUIT\n")
+		write_file:flush()
+	end
+	cleanup_child()
+	if fifo_in_keepalive then
+		fifo_in_keepalive:close()
+		fifo_in_keepalive = nil
+	end
+	os.execute("rm -f " .. STATE_FILE)
+	debug.log("wayland_capture: stopped")
 end
 
 -- Capture a frame.  Returns:
@@ -316,8 +391,12 @@ end
 --               downscaling.  2 means halve both dimensions, etc.
 function M.capture(output_name, scale, downscale)
 	if not running then
-		if not spawn_child() then
-			return nil
+		-- Try to attach to a child that was already spawned by the main
+		-- thread's M.start().  This avoids a ~2 s Wayland connection.
+		if not M.attach() then
+			if not spawn_child() then
+				return nil
+			end
 		end
 	end
 
