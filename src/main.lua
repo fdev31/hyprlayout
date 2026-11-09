@@ -414,11 +414,13 @@ local function poll_screenshots()
 			if f then
 				local bytes = f:read("*a")
 				f:close()
-				if bytes then
+				if bytes and #bytes > 0 then
 					img = love.graphics.newImage(love.data.newByteData(bytes))
 					if not img then
 						debug.log("poll: %s newImage failed for %s", payload.format, uid)
 					end
+				else
+					debug.log("poll: empty file for %s", uid)
 				end
 				os.remove(payload.path)
 			else
@@ -756,7 +758,19 @@ function love.update(dt)
 	for _, gs in ipairs(gui_screens) do
 		gs:update(dt)
 	end
-	poll_screenshots()
+	-- Only poll the screenshot channel when a thread has actually
+	-- finished.  channel:pop() blocks in this LÖVE build, so calling
+	-- it every frame would stall the main thread.
+	local any_done = false
+	for _, entry in ipairs(shot_threads) do
+		if not entry.t:isRunning() then
+			any_done = true
+			break
+		end
+	end
+	if any_done then
+		poll_screenshots()
+	end
 	shot_timer = shot_timer - dt
 	if shot_timer <= 0 then
 		shot_timer = SCREENSHOT_INTERVAL
