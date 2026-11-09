@@ -45,7 +45,7 @@ else
 	elseif s.backend == "native" then
 		ok, data = pcall(function()
 			local wc = require("core.wayland_capture")
-			if not wc.detect() or not wc.init() then
+			if not wc.detect() or not wc.attach() then
 				return nil
 			end
 			local r = wc.capture(s.uid, scale, downscale)

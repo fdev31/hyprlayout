@@ -52,7 +52,7 @@ end
 function M.capture_native(uid, dir, scale, timeout, downscale)
 	-- 1. Native Wayland backend (in-process, zero-copy)
 	local ok, wc = pcall(require, "core.wayland_capture")
-	if ok and wc.detect() and wc.init() then
+	if ok and wc.detect() and wc.attach() then
 		local result = wc.capture(uid, scale, downscale)
 		if result then
 			debug.log("screenshot %s: backend=native (%dx%d)", uid, result.width, result.height)
