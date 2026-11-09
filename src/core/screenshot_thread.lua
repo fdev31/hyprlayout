@@ -1,4 +1,4 @@
-local s, shot_dir, scale, timeout = ...
+local s, shot_dir, scale, timeout, downscale = ...
 -- Make the C source path available to wayland_capture.lua (loaded via
 -- require below).  love.filesystem and debug are nil in worker threads.
 _G.HYPR_C_SOURCE_PATH = s.c_source_path
@@ -30,10 +30,47 @@ if not valid then
 elseif HDR_FORMATS[s.currentFormat] then
 	print("[shot-thread] skipping HDR monitor " .. s.uid .. " (grim hangs on 10-bit)")
 else
-	local ok, data = pcall(grim.capture_native, s.uid, shot_dir, scale, timeout)
-	if not ok then
-		print("[shot-thread] capture error for " .. s.uid .. ": " .. tostring(data))
-		data = nil
+	-- Respect the --screenshot backend flag:
+	--   "grim"   → skip native, use grim only
+	--   "native" → use native only (no grim fallback)
+	--   nil      → auto (native → grim)
+	local ok, data
+	if s.backend == "grim" then
+		ok, data = pcall(grim.capture, s.uid, shot_dir, scale, timeout)
+		if ok and data then
+			data = { path = shot_dir .. "/" .. data, format = "png" }
+		else
+			data = nil
+		end
+	elseif s.backend == "native" then
+		ok, data = pcall(function()
+			local wc = require("core.wayland_capture")
+			if not wc.detect() or not wc.init() then
+				return nil
+			end
+			local r = wc.capture(s.uid, scale, downscale)
+			if not r then
+				return nil
+			end
+			return {
+				width = r.width,
+				height = r.height,
+				stride = r.stride,
+				size = r.size,
+				data = r.data,
+				format = "bgra",
+			}
+		end)
+		if not ok then
+			print("[shot-thread] capture error for " .. s.uid .. ": " .. tostring(data))
+			data = nil
+		end
+	else
+		ok, data = pcall(grim.capture_native, s.uid, shot_dir, scale, timeout, downscale)
+		if not ok then
+			print("[shot-thread] capture error for " .. s.uid .. ": " .. tostring(data))
+			data = nil
+		end
 	end
 
 	-- The native child (spawned inside capture_native) must be cleaned up

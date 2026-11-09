@@ -17,6 +17,7 @@ local grim = require("core.grim")
 local SCREEN_SCALE = Panel.DEFAULT_CANVAS_SCALE
 local CONFIRM_DELAY = 20
 local SCREENSHOT_INTERVAL = 10
+local screenshot_backend = nil -- nil = auto, "native", "grim", "none"
 local gui_screens = {}
 local selected = nil
 local dragging = false
@@ -356,8 +357,15 @@ local function start_screenshot_thread()
 			-- Width of the framebuffer grim captures (rotation swaps the axes).
 			local native_w = (scr.transform % 2 == 1) and scr.mode.height or scr.mode.width
 			local scale = tw / native_w
+			-- Integer software downscale factor for the native backend.
+			-- The compositor only supports integer scale >= 1, so fractional
+			-- downscaling is done in software (box filter) in the C child.
+			local downscale = 1
+			if scale and scale > 0 and scale < 1 then
+				downscale = math.max(1, math.ceil(1 / scale))
+			end
 			debug.log(
-				"screenshot: spawning thread for %s (mode=%dx%d screen_scale=%s transform=%s -> tw=%d th=%d scale=%s)",
+				"screenshot: spawning thread for %s (mode=%dx%d screen_scale=%s transform=%s -> tw=%d th=%d scale=%s downscale=%d)",
 				scr.uid,
 				scr.mode.width,
 				scr.mode.height,
@@ -365,7 +373,8 @@ local function start_screenshot_thread()
 				tostring(scr.transform),
 				tw,
 				th,
-				scale
+				scale,
+				downscale
 			)
 			local t = love.thread.newThread("core/screenshot_thread.lua")
 			t:start({
@@ -375,7 +384,8 @@ local function start_screenshot_thread()
 				th = th,
 				currentFormat = scr.current_format,
 				c_source_path = C_SOURCE_PATH,
-			}, shot_dir, scale, SCREENSHOT_INTERVAL)
+				backend = screenshot_backend,
+			}, shot_dir, scale, SCREENSHOT_INTERVAL, downscale)
 			table.insert(shot_threads, { uid = scr.uid, t = t })
 		end
 	end
@@ -543,6 +553,7 @@ Options:
               No-op if not found; will apply first in alphabetical order if multiple found.
     install : symlink the entry point into the Hyprland config dir and patch
                hyprland.lua to auto-apply the layout on monitor add/remove.
+ --screenshot <native|grim|none> : force the screenshot capture backend
  <profile name> : loads a profile]])
 		cli_exit(0)
 		return true
@@ -598,13 +609,47 @@ function love.load()
 		end
 	end
 
+	-- Parse --screenshot <native|grim|none> from the command line.
+	if arg then
+		for i, a in ipairs(arg) do
+			if a == "--screenshot" and arg[i + 1] then
+				local v = arg[i + 1]
+				if v == "native" or v == "grim" or v == "none" then
+					screenshot_backend = v
+				else
+					print("Invalid --screenshot value: " .. v .. " (use native, grim, or none)")
+					screenshot_backend = "none"
+				end
+				break
+			end
+		end
+	end
+
 	-- Detect the capture backend once; previews are skipped when nothing is available.
 	shot_available = grim.detect()
 	local native_ok, native_available, native_protocol = pcall(function()
 		local wc = require("core.wayland_capture")
 		return wc.detect(), wc.protocol()
 	end)
-	if native_ok and native_available then
+	if screenshot_backend == "none" then
+		shot_available = false
+		print("screenshots: disabled (--screenshot none)")
+	elseif screenshot_backend == "native" then
+		if native_ok and native_available then
+			print("screenshots: native backend forced (" .. tostring(native_protocol) .. ")")
+			shot_available = true
+		else
+			print("screenshots: native backend requested but not available")
+			shot_available = false
+		end
+	elseif screenshot_backend == "grim" then
+		if shot_available then
+			print("screenshots: grim backend forced")
+		else
+			print("screenshots: grim backend requested but grim not found")
+			shot_available = false
+		end
+	elseif native_ok and native_available then
 		print("screenshots: native backend available (" .. tostring(native_protocol) .. ")")
 		shot_available = true
 	elseif shot_available then

@@ -46,11 +46,14 @@ end
 ---   { width=..., height=..., stride=..., size=..., data=<cdata ptr>, format="bgra" }
 ---   { path=<absolute path>, format="png" }
 ---   nil  (no backend available or all failed)
-function M.capture_native(uid, dir, scale, timeout)
+---
+--- downscale: integer software box-filter factor for the native backend
+---            (>= 1; 1 means no downscaling).  Ignored by the grim path.
+function M.capture_native(uid, dir, scale, timeout, downscale)
 	-- 1. Native Wayland backend (in-process, zero-copy)
 	local ok, wc = pcall(require, "core.wayland_capture")
 	if ok and wc.detect() and wc.init() then
-		local result = wc.capture(uid, scale)
+		local result = wc.capture(uid, scale, downscale)
 		if result then
 			debug.log("screenshot %s: backend=native (%dx%d)", uid, result.width, result.height)
 			return {

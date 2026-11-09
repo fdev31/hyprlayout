@@ -340,22 +340,28 @@ end
 -- Capture a frame.  Returns:
 --   { width=..., height=..., stride=..., size=..., data=<lua string>, format="bgra" }
 --   nil  on any failure (child crashed, timeout, protocol error).
-function M.capture(output_name, scale)
+--
+-- output_name:  Wayland output name (e.g. "DP-1").
+-- scale:        Compositor scale factor (informational; the C child ignores
+--               fractional values and uses full resolution).
+-- downscale:    Integer software box-filter factor (>= 1).  1 means no
+--               downscaling.  2 means halve both dimensions, etc.
+function M.capture(output_name, scale, downscale)
 	if not running then
 		if not spawn_child() then
 			return nil
 		end
 	end
 
-	-- Build the command: "CAPTURE <output_name> [scale]\n"
-	-- Scale is always passed when available (the C child treats it as an
-	-- integer factor; software downsample is a TODO, so it is ignored for now).
-	local cmd
+	-- Build the command: "CAPTURE <output_name> [scale] [downscale]\n"
+	local cmd = "CAPTURE " .. (output_name or "")
 	if scale then
-		cmd = "CAPTURE " .. (output_name or "") .. " " .. scale .. "\n"
-	else
-		cmd = "CAPTURE " .. (output_name or "") .. "\n"
+		cmd = cmd .. " " .. scale
 	end
+	if downscale and downscale > 1 then
+		cmd = cmd .. " " .. downscale
+	end
+	cmd = cmd .. "\n"
 
 	local ok = write_file:write(cmd)
 	if not ok then

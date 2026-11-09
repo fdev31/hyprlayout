@@ -98,6 +98,35 @@ static int dispatch_timeout(int ms);
  * Listener callbacks
  * ------------------------------------------------------------------------- */
 
+static void output_geometry(void *data, struct wl_output *output,
+			    int32_t x, int32_t y,
+			    int32_t physical_width, int32_t physical_height,
+			    int32_t subpixel, const char *make,
+			    const char *model, int32_t transform)
+{
+	(void)data; (void)output; (void)x; (void)y;
+	(void)physical_width; (void)physical_height;
+	(void)subpixel; (void)make; (void)model; (void)transform;
+}
+
+static void output_mode(void *data, struct wl_output *output,
+			uint32_t flags, int32_t width, int32_t height,
+			int32_t refresh)
+{
+	(void)data; (void)output; (void)flags;
+	(void)width; (void)height; (void)refresh;
+}
+
+static void output_done(void *data, struct wl_output *output)
+{
+	(void)data; (void)output;
+}
+
+static void output_scale(void *data, struct wl_output *output, int32_t factor)
+{
+	(void)data; (void)output; (void)factor;
+}
+
 static void output_name(void *data, struct wl_output *output, const char *name)
 {
 	struct output_info *info = data;
@@ -108,8 +137,21 @@ static void output_name(void *data, struct wl_output *output, const char *name)
 	}
 }
 
+static void output_description(void *data, struct wl_output *output,
+			       const char *description)
+{
+	(void)data; (void)output; (void)description;
+}
+
+/* libwayland asserts if any listener entry is NULL, so every field
+ * must be populated even when the event is unused. */
 static const struct wl_output_listener output_listener = {
+	.geometry = output_geometry,
+	.mode = output_mode,
+	.done = output_done,
+	.scale = output_scale,
 	.name = output_name,
+	.description = output_description,
 };
 
 /* --- ext-foreign-toplevel-list listener --- */
@@ -488,6 +530,53 @@ static void convert_to_bgra(const uint8_t *src, uint32_t format,
 	}
 }
 
+/* Box-filter downscale of a BGRA image by an integer factor.
+ * Returns a newly malloc'd buffer, or NULL on failure. */
+static uint8_t *downscale_bgra(const uint8_t *src, uint32_t sw, uint32_t sh,
+                                uint32_t factor,
+                                uint32_t *out_w, uint32_t *out_h)
+{
+	if (factor <= 1)
+		return NULL;
+	uint32_t dw = sw / factor;
+	uint32_t dh = sh / factor;
+	if (dw == 0 || dh == 0)
+		return NULL;
+
+	uint8_t *dst = malloc((size_t)dw * dh * 4);
+	if (!dst)
+		return NULL;
+
+	uint32_t count = factor * factor;
+	for (uint32_t y = 0; y < dh; y++) {
+		for (uint32_t x = 0; x < dw; x++) {
+			uint32_t sr = 0, sg = 0, sb = 0, sa = 0;
+			for (uint32_t dy = 0; dy < factor; dy++) {
+				for (uint32_t dx = 0; dx < factor; dx++) {
+					uint32_t sx = x * factor + dx;
+					uint32_t sy = y * factor + dy;
+					if (sx < sw && sy < sh) {
+						const uint8_t *p = src + (size_t)(sy * sw + sx) * 4;
+						sr += p[0];
+						sg += p[1];
+						sb += p[2];
+						sa += p[3];
+					}
+				}
+			}
+			uint8_t *d = dst + (size_t)(y * dw + x) * 4;
+			d[0] = (uint8_t)(sr / count);
+			d[1] = (uint8_t)(sg / count);
+			d[2] = (uint8_t)(sb / count);
+			d[3] = (uint8_t)(sa / count);
+		}
+	}
+
+	*out_w = dw;
+	*out_h = dh;
+	return dst;
+}
+
 static void emit_ok(uint32_t w, uint32_t h, const uint8_t *pixels, size_t len)
 {
 	printf("OK %u %u %zu\n", w, h, (size_t)w * 4);
@@ -505,7 +594,7 @@ static void emit_err(const char *reason)
  * ext-image-copy-capture-v1 flow (full output)
  * ------------------------------------------------------------------------- */
 
-static int run_capture_ext(const char *output_name)
+static int run_capture_ext(const char *output_name, uint32_t downscale)
 {
 	struct output_info *oi = find_output(output_name);
 	if (!oi) {
@@ -594,9 +683,20 @@ static int run_capture_ext(const char *output_name)
 	convert_to_bgra(cap.map, format, cap.width, cap.height,
 			cap.stride, pixels);
 
-	emit_ok(cap.width, cap.height, pixels, pixel_bytes);
-
-	free(pixels);
+	uint32_t out_w = cap.width, out_h = cap.height;
+	uint8_t *out_pixels = pixels;
+	size_t out_len = pixel_bytes;
+	if (downscale > 1) {
+		uint8_t *ds = downscale_bgra(pixels, cap.width, cap.height,
+			downscale, &out_w, &out_h);
+		if (ds) {
+			free(pixels);
+			out_pixels = ds;
+			out_len = (size_t)out_w * out_h * 4;
+		}
+	}
+	emit_ok(out_w, out_h, out_pixels, out_len);
+	free(out_pixels);
 	shm_cleanup();
 	ext_image_copy_capture_frame_v1_destroy(frame);
 	ext_image_copy_capture_session_v1_destroy(session);
@@ -609,7 +709,7 @@ static int run_capture_ext(const char *output_name)
  * wlr-screencopy flow (fallback, full output)
  * ------------------------------------------------------------------------- */
 
-static int run_capture_wlr(const char *output_name)
+static int run_capture_wlr(const char *output_name, uint32_t downscale)
 {
 	struct output_info *oi = find_output(output_name);
 	if (!oi) {
@@ -684,9 +784,20 @@ static int run_capture_wlr(const char *output_name)
 	convert_to_bgra(cap.map, cap.shm_format, cap.width, cap.height,
 			cap.stride, pixels);
 
-	emit_ok(cap.width, cap.height, pixels, pixel_bytes);
-
-	free(pixels);
+	uint32_t out_w = cap.width, out_h = cap.height;
+	uint8_t *out_pixels = pixels;
+	size_t out_len = pixel_bytes;
+	if (downscale > 1) {
+		uint8_t *ds = downscale_bgra(pixels, cap.width, cap.height,
+			downscale, &out_w, &out_h);
+		if (ds) {
+			free(pixels);
+			out_pixels = ds;
+			out_len = (size_t)out_w * out_h * 4;
+		}
+	}
+	emit_ok(out_w, out_h, out_pixels, out_len);
+	free(out_pixels);
 	shm_cleanup();
 	zwlr_screencopy_frame_v1_destroy(frame);
 
@@ -697,7 +808,7 @@ static int run_capture_wlr(const char *output_name)
  * ext-foreign-toplevel capture flow (no wl_output required)
  * ------------------------------------------------------------------------- */
 
-static int run_capture_toplevel(void)
+static int run_capture_toplevel(uint32_t downscale)
 {
 	if (toplevel_count == 0) {
 		emit_err("no toplevels available");
@@ -785,13 +896,21 @@ static int run_capture_toplevel(void)
 	convert_to_bgra(cap.map, format, cap.width, cap.height,
 			cap.stride, pixels);
 
-	emit_ok(cap.width, cap.height, pixels, pixel_bytes);
-
-	free(pixels);
+	uint32_t out_w = cap.width, out_h = cap.height;
+	uint8_t *out_pixels = pixels;
+	size_t out_len = pixel_bytes;
+	if (downscale > 1) {
+		uint8_t *ds = downscale_bgra(pixels, cap.width, cap.height,
+			downscale, &out_w, &out_h);
+		if (ds) {
+			free(pixels);
+			out_pixels = ds;
+			out_len = (size_t)out_w * out_h * 4;
+		}
+	}
+	emit_ok(out_w, out_h, out_pixels, out_len);
+	free(out_pixels);
 	shm_cleanup();
-	ext_image_copy_capture_frame_v1_destroy(frame);
-	ext_image_copy_capture_session_v1_destroy(session);
-	ext_image_capture_source_v1_destroy(source);
 
 	return 0;
 }
@@ -893,14 +1012,14 @@ int main(void)
 		if (strncmp(line, "CAPTURE ", 8) == 0) {
 			char output_name[256] = {0};
 			double scale = 1.0;
-			if (sscanf(line + 8, "%255s %lf", output_name, &scale) >= 1) {
-				(void)scale; /* software downsample is TODO */
+			uint32_t downscale = 1;
+			if (sscanf(line + 8, "%255s %lf %u", output_name, &scale, &downscale) >= 1) {
 				if (protocol == 1)
-					run_capture_ext(output_name);
+					run_capture_ext(output_name, downscale);
 				else if (protocol == 2)
-					run_capture_wlr(output_name);
+					run_capture_wlr(output_name, downscale);
 				else if (protocol == 3)
-					run_capture_toplevel();
+					run_capture_toplevel(downscale);
 				else
 					emit_err("no capture protocol available");
 			}
