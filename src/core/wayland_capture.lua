@@ -1,16 +1,17 @@
 -- Wayland native screen capture via a long-lived child process.
 --
 -- Compiles core/wayland_capture.c at runtime into a standalone executable,
--- then fork/exec's it as a child process that maintains a single Wayland
--- connection.  Capture requests are sent over a stdin pipe; frame data is
--- read back from a stdout pipe.
+-- then spawns it as a child process (via shell) that maintains a single
+-- Wayland connection.  Capture requests are sent over a stdin FIFO; frame
+-- data is read back from a stdout FIFO.
 --
 -- If the child segfaults (compositor bug, buffer corruption, etc.) the
--- parent detects the broken pipe, cleans up, and returns nil.  The caller
--- (grim.lua) then falls back to the grim PPM subprocess.  The next capture
+-- parent detects the closed FIFO, cleans up, and returns nil.  The caller
+-- (grim.lua) then falls back to the grim PNG subprocess.  The next capture
 -- respawns a fresh child.
 --
 -- Protocol (stdin/stdout):
+--   child → parent:  PROTOCOL <name>\n
 --   child → parent:  READY\n
 --   parent → child:  CAPTURE <output_name> [scale]\n
 --   child → parent:  OK <w> <h> <stride>\n<raw BGRA bytes>
@@ -19,47 +20,27 @@
 
 local M = {}
 
-local ffi = require("ffi")
 local debug = require("core.debug")
-
---[[ ------------------------------------------------------------------
- FFI declarations for POSIX process / pipe management
- ------------------------------------------------------------------ ]]
-
-ffi.cdef([[
-typedef int pid_t;
-typedef struct { int __data[10]; } pthread_mutex_t;
-int    pipe(int fds[2]);
-pid_t  fork(void);
-int    dup2(int oldfd, int newfd);
-int    execvp(const char *file, char *const argv[]);
-ssize_t read(int fd, void *buf, size_t count);
-ssize_t write(int fd, const void *buf, size_t count);
-int    close(int fd);
-int    kill(pid_t pid, int sig);
-int    waitpid(pid_t pid, int *status);
-int    poll(struct pollfd *fds, unsigned int nfds, int timeout);
-void   _exit(int status);
-void   pthread_mutex_lock(pthread_mutex_t *mutex);
-void   pthread_mutex_unlock(pthread_mutex_t *mutex);
-int    pthread_mutex_init(pthread_mutex_t *mutex, const void *attr);
-struct pollfd { int fd; short events; short revents; };
-]])
 
 local C_SOURCE_PATH
 do
-	-- love.filesystem is nil in worker threads, so derive the path from
-	-- this file's own location instead.
-	local src_file = debug.getinfo(1, "S").source
-	-- Lua prepends '@' to file sources; strip it.
-	src_file = src_file:sub(2)
-	-- Only usable if it's an absolute filesystem path.  In .love bundles
-	-- the path is virtual (e.g. "game/core/...") and has no on-disk
-	-- counterpart, so C_SOURCE_PATH stays nil and we fall back to grim.
-	if src_file:sub(1, 1) == "/" and src_file:match("%.lua$") then
-		local src_dir = src_file:match("^(.*)/core/wayland_capture%.lua$")
-		if src_dir then
-			C_SOURCE_PATH = src_dir .. "/core/wayland_capture.c"
+	-- Prefer the path passed from the main thread (works in worker threads
+	-- where love.filesystem and debug are nil).
+	C_SOURCE_PATH = _G.HYPR_C_SOURCE_PATH
+	if not C_SOURCE_PATH then
+		-- Fallback: derive from this file's own location (main thread only).
+		-- Use _G.debug because the local 'debug' variable below shadows
+		-- the global debug library.
+		local dbg = _G.debug
+		if dbg and dbg.getinfo then
+			local src_file = dbg.getinfo(1, "S").source
+			src_file = src_file:sub(2)
+			if src_file:sub(1, 1) == "/" and src_file:match("%.lua$") then
+				local src_dir = src_file:match("^(.*)/core/wayland_capture%.lua$")
+				if src_dir then
+					C_SOURCE_PATH = src_dir .. "/core/wayland_capture.c"
+				end
+			end
 		end
 	end
 end
@@ -69,17 +50,15 @@ end
  ------------------------------------------------------------------ ]]
 
 local child_pid = nil
-local write_fd = nil -- parent writes to child stdin
-local read_fd = nil -- parent reads from child stdout
+local write_file = nil -- io.open handle for writing to child stdin
+local read_file = nil -- io.open handle for reading from child stdout
 local exe_path = nil
 local running = false
-
--- Serialises pipe access across LÖVE threads (one per monitor).
-local capture_mutex = ffi.new("pthread_mutex_t[1]")
-ffi.C.pthread_mutex_init(capture_mutex, nil)
-
--- Reusable 1-byte read buffer (avoids per-byte allocation).
-local read_byte_buf = ffi.new("char[1]")
+local fifo_in = nil
+local fifo_out = nil
+local spawn_id = 0
+local native_available = nil -- cached detect() result
+local native_protocol = nil -- protocol name from the child's PROTOCOL line
 
 --[[ ------------------------------------------------------------------
  Helpers
@@ -106,14 +85,33 @@ local function compile_exe()
 	local cache_dir = get_cache_dir()
 	local exe = cache_dir .. "/wayland_capture_bin"
 
-	if not file_exists(exe) then
+	-- Rebuild if the source is newer than the cached binary.
+	local need_build = not file_exists(exe)
+	if not need_build then
+		need_build = os.execute(string.format("test %q -nt %q", C_SOURCE_PATH, exe)) == 0
+	end
+
+	if need_build then
 		os.execute(string.format("mkdir -p %q", cache_dir))
 
 		local cc = "cc"
 		if os.execute("command -v gcc > /dev/null 2>&1") == 0 then
 			cc = "gcc"
 		end
-		local rc = os.execute(string.format("%s -O2 -o %q %q -lwayland-client -lpthread 2>&1", cc, exe, C_SOURCE_PATH))
+		local src_dir = C_SOURCE_PATH:match("^(.*)/[^/]*$")
+		local protocol_dir = src_dir .. "/protocol"
+		local rc = os.execute(
+			string.format(
+				"%s -O2 -o %q %q %q/ext-image-copy-capture.c %q/ext-image-capture-source.c %q/ext-foreign-toplevel-list.c %q/wlr-screencopy.c -lwayland-client -lpthread 2>&1",
+				cc,
+				exe,
+				C_SOURCE_PATH,
+				protocol_dir,
+				protocol_dir,
+				protocol_dir,
+				protocol_dir
+			)
+		)
 		if rc ~= 0 or not file_exists(exe) then
 			debug.log("wayland_capture: compile failed (rc=%d)", rc)
 			return nil
@@ -123,61 +121,32 @@ local function compile_exe()
 	return exe
 end
 
--- Read one line (up to and including \n) from a raw fd.
--- Returns the line without the trailing newline, or nil on EOF/error.
-local function read_line(fd)
-	local buf = {}
-	while true do
-		local n = ffi.C.read(fd, read_byte_buf, 1)
-		if n <= 0 then
-			return nil
-		end
-		if read_byte_buf[0] == "\n" then
-			return table.concat(buf)
-		end
-		buf[#buf + 1] = read_byte_buf[0]
-	end
-end
-
--- Read exactly `count` bytes from a raw fd.
--- Returns a Lua string, or nil on EOF/error.
-local function read_exact(fd, count)
-	local buf = ffi.new("char[?]", count)
-	local total = 0
-	while total < count do
-		local n = ffi.C.read(fd, buf + total, count - total)
-		if n <= 0 then
-			ffi.C.free(buf)
-			return nil
-		end
-		total = total + n
-	end
-	local result = ffi.string(buf, count)
-	ffi.C.free(buf)
-	return result
-end
-
--- Close pipes and reap the child process.
+-- Close file handles, kill the child, and remove the FIFOs.
 local function cleanup_child()
-	if write_fd then
-		ffi.C.close(write_fd)
-		write_fd = nil
+	if write_file then
+		write_file:close()
+		write_file = nil
 	end
-	if read_fd then
-		ffi.C.close(read_fd)
-		read_fd = nil
+	if read_file then
+		read_file:close()
+		read_file = nil
 	end
 	if child_pid then
-		-- Kill the child first so waitpid() doesn't block on a hung process.
-		ffi.C.kill(child_pid, 9) -- SIGKILL
-		local status = ffi.new("int[1]")
-		ffi.C.waitpid(child_pid, status)
+		os.execute("kill " .. child_pid .. " 2>/dev/null")
 		child_pid = nil
+	end
+	if fifo_in then
+		os.execute("rm -f " .. fifo_in .. " " .. fifo_out)
+		fifo_in = nil
+		fifo_out = nil
 	end
 	running = false
 end
 
 -- Spawn the child process.  Returns true on success.
+-- Uses a shell-spawned child with named pipes (FIFOs) for communication.
+-- This avoids FFI process management (posix_spawn/fork) which can crash
+-- the LÖVE process when called from worker threads.
 local function spawn_child()
 	if running then
 		return true
@@ -188,79 +157,79 @@ local function spawn_child()
 		return false
 	end
 
-	-- Create two pipes: stdin_pipe (parent→child) and stdout_pipe (child→parent)
-	local stdin_pipe = ffi.new("int[2]")
-	local stdout_pipe = ffi.new("int[2]")
+	-- Create unique FIFO names (per-thread module instance).
+	-- Use a random component to avoid collisions between threads.
+	spawn_id = spawn_id + 1
+	local tag = string.format("%d_%d", spawn_id, math.random(100000, 999999))
+	fifo_in = "/tmp/wlcap_in_" .. tag
+	fifo_out = "/tmp/wlcap_out_" .. tag
 
-	if ffi.C.pipe(stdin_pipe) ~= 0 then
-		debug.log("wayland_capture: pipe() failed (stdin)")
+	-- Clean up any stale FIFOs from a previous crashed instance.
+	os.execute("rm -f " .. fifo_in .. " " .. fifo_out)
+	os.execute("mkfifo " .. fifo_in .. " " .. fifo_out)
+
+	-- Spawn the child in the background via the shell.
+	-- The shell opens the FIFOs (stdin=read, stdout=write) before exec,
+	-- so our subsequent io.open calls won't block.
+	-- We write the PID to a file because io.popen with & blocks
+	-- (the pipe stays open until the backgrounded child exits).
+	local pidfile = "/tmp/wlcap_pid_" .. tag
+	os.execute(string.format("%s < %s > %s 2>/dev/null & echo $! > %s", exe_path, fifo_in, fifo_out, pidfile))
+
+	local pf = io.open(pidfile, "r")
+	local pid_str = pf and pf:read("*l") or nil
+	if pf then
+		pf:close()
+	end
+	os.execute("rm -f " .. pidfile)
+
+	if not pid_str or not pid_str:match("^%d+$") then
+		debug.log("wayland_capture: failed to spawn child")
+		os.execute("rm -f " .. fifo_in .. " " .. fifo_out)
+		fifo_in = nil
+		fifo_out = nil
 		return false
 	end
-	if ffi.C.pipe(stdout_pipe) ~= 0 then
-		ffi.C.close(stdin_pipe[0])
-		ffi.C.close(stdin_pipe[1])
-		debug.log("wayland_capture: pipe() failed (stdout)")
-		return false
-	end
 
-	-- Build argv BEFORE fork (allocation is not async-signal-safe).
-	local argv = ffi.new("char*[2]")
-	argv[0] = exe_path
-	argv[1] = nil
+	child_pid = tonumber(pid_str)
 
-	local pid = ffi.C.fork()
-	if pid < 0 then
-		ffi.C.close(stdin_pipe[0])
-		ffi.C.close(stdin_pipe[1])
-		ffi.C.close(stdout_pipe[0])
-		ffi.C.close(stdout_pipe[1])
-		ffi.C.free(argv)
-		debug.log("wayland_capture: fork() failed")
-		return false
-	end
-
-	if pid == 0 then
-		-- ---- child process: only async-signal-safe calls ----
-		ffi.C.close(stdin_pipe[1])
-		ffi.C.close(stdout_pipe[0])
-		ffi.C.dup2(stdin_pipe[0], 0)
-		ffi.C.dup2(stdout_pipe[1], 1)
-		ffi.C.close(stdin_pipe[0])
-		ffi.C.close(stdout_pipe[1])
-		ffi.C.execvp(exe_path, argv)
-		-- execvp failed; terminate without cleanup
-		ffi.C._exit(1)
-	end
-
-	-- ---- parent process ----
-	ffi.C.close(stdin_pipe[0])
-	ffi.C.close(stdout_pipe[1])
-	ffi.C.free(argv)
-
-	child_pid = pid
-	write_fd = stdin_pipe[1]
-	read_fd = stdout_pipe[0]
-
-	-- Wait for the child to become ready (5 s timeout).
-	local pfd = ffi.new("struct pollfd")
-	pfd.fd = read_fd
-	pfd.events = 1 -- POLLIN
-	local poll_ret = ffi.C.poll(pfd, 1, 5000)
-	if poll_ret <= 0 then
-		debug.log("wayland_capture: child not ready (poll ret=%d)", poll_ret)
+	-- The child prints "PROTOCOL <name>" then "READY" once it has
+	-- connected to Wayland and selected a usable capture protocol.
+	-- Read both lines with a timeout so we never block forever if the
+	-- child is stuck.
+	local h = io.popen("timeout 6 head -2 " .. fifo_out .. " 2>/dev/null")
+	local protocol = h:read("*l")
+	local ready = h:read("*l")
+	h:close()
+	if ready ~= "READY" then
+		debug.log(
+			"wayland_capture: child did not send READY (protocol=%s ready=%s)",
+			tostring(protocol),
+			tostring(ready)
+		)
 		cleanup_child()
 		return false
 	end
+	native_protocol = protocol
+	print("wayland_capture: backend=" .. tostring(protocol))
 
-	local ready = read_line(read_fd)
-	if ready ~= "READY" then
-		debug.log("wayland_capture: child did not send READY (got: %s)", tostring(ready))
+	-- Open the FIFOs for subsequent reads/writes.  The child is alive
+	-- and has the FIFOs open, so these should not block.
+	read_file = io.open(fifo_out, "r")
+	if not read_file then
+		debug.log("wayland_capture: failed to open stdout FIFO")
+		cleanup_child()
+		return false
+	end
+	write_file = io.open(fifo_in, "w")
+	if not write_file then
+		debug.log("wayland_capture: failed to open stdin FIFO")
 		cleanup_child()
 		return false
 	end
 
 	running = true
-	debug.log("wayland_capture: child spawned (pid=%d)", pid)
+	debug.log("wayland_capture: child spawned (pid=%d)", child_pid)
 	return true
 end
 
@@ -268,16 +237,66 @@ end
  Public API (matches the interface expected by grim.lua)
  ------------------------------------------------------------------ ]]
 
--- Check whether the native backend can be compiled and run.
+-- Check whether the native backend can be compiled AND the compositor
+-- supports the ext_image_copy_capture_v1 protocol.
 -- Does NOT spawn the child; that happens in init().
 function M.detect()
+	if native_available ~= nil then
+		return native_available
+	end
+
 	local exe = compile_exe()
 	if not exe then
 		debug.log("wayland_capture: NOT available (compile failed)")
+		native_available = false
 		return false
 	end
-	debug.log("wayland_capture: available (%s)", exe)
+
+	-- Probe the compositor by running the binary with stdin closed
+	-- (immediate EOF).  It connects to Wayland, prints "PROTOCOL <name>"
+	-- then "READY" when a usable capture protocol is available, and
+	-- exits 0; it exits 1 when no protocol is usable.
+	local h = io.popen(string.format("timeout 5 %s < /dev/null 2>/dev/null; echo $?", exe))
+	local out = h:read("*a")
+	h:close()
+
+	local lines = {}
+	for line in out:gmatch("[^\r\n]+") do
+		table.insert(lines, line)
+	end
+	local rc = lines[#lines]
+	local protocol = nil
+	local ready = false
+	for _, line in ipairs(lines) do
+		local name = line:match("^PROTOCOL (.+)$")
+		if name then
+			protocol = name
+		elseif line == "READY" then
+			ready = true
+		end
+	end
+
+	if rc ~= "0" or not protocol or not ready then
+		debug.log(
+			"wayland_capture: NOT available (rc=%s protocol=%s ready=%s)",
+			tostring(rc),
+			tostring(protocol),
+			tostring(ready)
+		)
+		native_available = false
+		return false
+	end
+
+	native_protocol = protocol
+	native_available = true
+	debug.log("wayland_capture: available (%s)", protocol)
 	return true
+end
+
+-- Return the name of the capture protocol the compositor selected
+-- (set by detect() or spawn_child()).  nil if unknown.
+function M.protocol()
+	return native_protocol
 end
 
 -- Spawn the child process (idempotent – safe to call repeatedly).
@@ -289,61 +308,45 @@ end
 --   { width=..., height=..., stride=..., size=..., data=<lua string>, format="bgra" }
 --   nil  on any failure (child crashed, timeout, protocol error).
 function M.capture(output_name, scale)
-	ffi.C.pthread_mutex_lock(capture_mutex)
-
 	if not running then
 		if not spawn_child() then
-			ffi.C.pthread_mutex_unlock(capture_mutex)
 			return nil
 		end
 	end
 
 	-- Build the command: "CAPTURE <output_name> [scale]\n"
+	-- Scale is always passed when available (the C child treats it as an
+	-- integer factor; software downsample is a TODO, so it is ignored for now).
 	local cmd
-	if scale and scale > 1 then
+	if scale then
 		cmd = "CAPTURE " .. (output_name or "") .. " " .. scale .. "\n"
 	else
 		cmd = "CAPTURE " .. (output_name or "") .. "\n"
 	end
 
-	local n = ffi.C.write(write_fd, cmd, #cmd)
-	if n ~= #cmd then
+	local ok = write_file:write(cmd)
+	if not ok then
 		debug.log("wayland_capture: write failed (child crashed?)")
 		cleanup_child()
-		ffi.C.pthread_mutex_unlock(capture_mutex)
 		return nil
 	end
+	write_file:flush()
 
-	-- Wait for a response (15 s timeout: 5 s internal C timeout + margin).
-	local pfd = ffi.new("struct pollfd")
-	pfd.fd = read_fd
-	pfd.events = 1 -- POLLIN
-	local poll_ret = ffi.C.poll(pfd, 1, 15000)
-	if poll_ret <= 0 then
-		debug.log("wayland_capture: poll failed (ret=%d, child crashed?)", poll_ret)
-		cleanup_child()
-		ffi.C.pthread_mutex_unlock(capture_mutex)
-		return nil
-	end
-
-	-- Read the header line.
-	local header = read_line(read_fd)
+	-- Read the header line.  Returns nil if the child died.
+	local header = read_file:read("*l")
 	if not header then
 		debug.log("wayland_capture: read failed (child crashed?)")
 		cleanup_child()
-		ffi.C.pthread_mutex_unlock(capture_mutex)
 		return nil
 	end
 
 	if header:sub(1, 3) == "ERR" then
 		debug.log("wayland_capture: capture failed: %s", header:sub(5))
-		ffi.C.pthread_mutex_unlock(capture_mutex)
 		return nil
 	end
 
 	if header:sub(1, 2) ~= "OK" then
 		debug.log("wayland_capture: unexpected response: %s", header)
-		ffi.C.pthread_mutex_unlock(capture_mutex)
 		return nil
 	end
 
@@ -351,24 +354,20 @@ function M.capture(output_name, scale)
 	local w_s, h_s, stride_s = header:match("^OK (%d+) (%d+) (%d+)$")
 	if not w_s then
 		debug.log("wayland_capture: bad header: %s", header)
-		ffi.C.pthread_mutex_unlock(capture_mutex)
 		return nil
 	end
 	local w, h, stride = tonumber(w_s), tonumber(h_s), tonumber(stride_s)
 
 	-- Read the raw BGRA payload.
 	local size = stride * h
-	local data = read_exact(read_fd, size)
-	if not data then
+	local data = read_file:read(size)
+	if not data or #data ~= size then
 		debug.log("wayland_capture: data read failed (child crashed?)")
 		cleanup_child()
-		ffi.C.pthread_mutex_unlock(capture_mutex)
 		return nil
 	end
 
 	debug.log("wayland_capture: ok %s %dx%d stride=%d (%d bytes)", output_name, w, h, stride, size)
-
-	ffi.C.pthread_mutex_unlock(capture_mutex)
 
 	return {
 		width = w,
@@ -382,16 +381,14 @@ end
 
 -- Shut down the child process.
 function M.shutdown()
-	ffi.C.pthread_mutex_lock(capture_mutex)
 	if not running then
-		ffi.C.pthread_mutex_unlock(capture_mutex)
 		return
 	end
-	local cmd = "QUIT\n"
-	ffi.C.write(write_fd, cmd, #cmd)
+	write_file:write("QUIT\n")
+	write_file:flush()
+	-- Give the child a moment to exit cleanly before we kill it.
 	cleanup_child()
 	debug.log("wayland_capture: shutdown")
-	ffi.C.pthread_mutex_unlock(capture_mutex)
 end
 
 return M

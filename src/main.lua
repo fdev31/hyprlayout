@@ -13,7 +13,6 @@ local profiles = require("core.profiles")
 local debug = require("core.debug")
 local backend = require("core.backend")
 local grim = require("core.grim")
-local ffi = require("ffi")
 
 local SCREEN_SCALE = Panel.DEFAULT_CANVAS_SCALE
 local CONFIRM_DELAY = 20
@@ -32,12 +31,13 @@ local original_configs = nil
 local anchor_data = {}
 local shot_threads = {}
 local shot_channel = nil
-local shot_grim = false
+local shot_available = false
 local shot_timer = 0
 local help_visible = false
 local gui_initialized = false
 local last_window_sig = nil
 local last_pos_sig = nil
+local C_SOURCE_PATH = nil
 
 local function build_gui_screens(info, scale)
 	local list = {}
@@ -325,8 +325,8 @@ local function start_screenshot_thread()
 		debug.log("screenshot: no gui screens yet, skipping")
 		return
 	end
-	if not shot_grim then
-		debug.log("screenshot: grim not detected, skipping")
+	if not shot_available then
+		debug.log("screenshot: no capture backend available, skipping")
 		return
 	end
 	-- One capture thread per active screen so all monitors are grabbed in parallel.
@@ -362,6 +362,7 @@ local function start_screenshot_thread()
 				tw = tw,
 				th = th,
 				currentFormat = scr.current_format,
+				c_source_path = C_SOURCE_PATH,
 			}, shot_dir, scale, SCREENSHOT_INTERVAL)
 			table.insert(shot_threads, t)
 		end
@@ -410,7 +411,6 @@ local function poll_screenshots()
 		local payload = msg.data
 
 		local img
-		local ppm_str
 		if type(payload) == "table" and payload.format == "bgra" then
 			-- Native Wayland capture: data is already BGRA
 			local w, h = payload.width, payload.height
@@ -419,53 +419,28 @@ local function poll_screenshots()
 			if not img then
 				debug.log("poll: native newImage failed for %dx%d %s", w, h, uid)
 			end
-		elseif type(payload) == "table" and payload.format == "ppm" then
-			-- Fallback: PPM table from capture_native
-			ppm_str = payload.data
-		elseif type(payload) == "string" then
-			-- Fallback: raw PPM string
-			ppm_str = payload
-		end
-
-		if ppm_str then
-			-- Fallback: PPM string from grim
-			local s, e, w_str, h_str, _ = ppm_str:find("P6%s+(%d+)%s+(%d+)%s+(%d+)%s")
-			if s then
-				local w = tonumber(w_str)
-				local h = tonumber(h_str)
-				local raw_start = e + 1
-				local rgb_bytes = ppm_str:sub(raw_start, raw_start + w * h * 3 - 1)
-
-				-- Convert RGB (top-down) to BGRA (bottom-up) via FFI
-				local src = ffi.cast("const unsigned char*", rgb_bytes)
-				local dst = ffi.new("unsigned char[?]", w * h * 4)
-				for row = 0, h - 1 do
-					local ppm_off = (h - 1 - row) * w * 3
-					local bmp_off = row * w * 4
-					for col = 0, w - 1 do
-						local si = ppm_off + col * 3
-						local di = bmp_off + col * 4
-						dst[di] = src[si + 2]
-						dst[di + 1] = src[si + 1]
-						dst[di + 2] = src[si]
-						dst[di + 3] = 255
+		elseif type(payload) == "table" and payload.format == "png" then
+			-- Grim PNG: read the file and decode in-memory
+			local f = io.open(payload.path, "rb")
+			if f then
+				local bytes = f:read("*a")
+				f:close()
+				if bytes then
+					img = love.graphics.newImage(love.data.newByteData(bytes))
+					if not img then
+						debug.log("poll: PNG newImage failed for %s", uid)
 					end
 				end
-
-				local bmp = build_bmp_header(w, h) .. ffi.string(dst, w * h * 4)
-				img = love.graphics.newImage(love.data.newByteData(bmp))
-				if not img then
-					debug.log("poll: PPM newImage failed for %dx%d %s", w, h, uid)
-				end
+				os.remove(payload.path)
 			else
-				debug.log("poll: failed to parse PPM header for %s", uid)
+				debug.log("poll: can't open %s", payload.path)
 			end
 		end
 
 		if img then
 			for _, gs in ipairs(gui_screens) do
 				if gs.screen.uid == uid then
-					gs.preview = img
+					gs:set_preview(img)
 					break
 				end
 			end
@@ -623,17 +598,40 @@ function love.load()
 	end
 	shot_dir = cache_base .. "/hyprlayout/shots"
 
-	-- Detect the capture tool once; previews are skipped when grim is missing.
-	shot_grim = grim.detect()
-	if shot_grim then
-		local native_ok = pcall(function()
-			return require("core.wayland_capture").detect()
-		end)
-		if native_ok then
-			print("screenshots enabled using native")
+	-- Resolve the C source path now (love.filesystem is only available
+	-- after love.load(); worker threads can't access it).
+	do
+		local wd = love.filesystem.getWorkingDirectory()
+		-- Check both layouts: "love src" (wd/src/core/...) and
+		-- running from inside src/ (wd/core/...).
+		local p1 = wd .. "/src/core/wayland_capture.c"
+		local p2 = wd .. "/core/wayland_capture.c"
+		local f1 = io.open(p1, "r")
+		if f1 then
+			f1:close()
+			C_SOURCE_PATH = p1
 		else
-			print("screenshots enabled using grim")
+			local f2 = io.open(p2, "r")
+			if f2 then
+				f2:close()
+				C_SOURCE_PATH = p2
+			end
 		end
+	end
+
+	-- Detect the capture backend once; previews are skipped when nothing is available.
+	shot_available = grim.detect()
+	local native_ok, native_available, native_protocol = pcall(function()
+		local wc = require("core.wayland_capture")
+		return wc.detect(), wc.protocol()
+	end)
+	if native_ok and native_available then
+		print("screenshots: native backend available (" .. tostring(native_protocol) .. ")")
+		shot_available = true
+	elseif shot_available then
+		print("screenshots enabled using grim")
+	else
+		print("screenshots: disabled (no backend available)")
 	end
 	os.execute('mkdir -p "' .. shot_dir .. '"')
 

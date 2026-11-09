@@ -1,4 +1,7 @@
 local s, shot_dir, scale, timeout = ...
+-- Make the C source path available to wayland_capture.lua (loaded via
+-- require below).  love.filesystem and debug are nil in worker threads.
+_G.HYPR_C_SOURCE_PATH = s.c_source_path
 local channel = love.thread.getChannel("screenshots")
 local grim = require("core.grim")
 local debug = require("core.debug")
@@ -27,9 +30,13 @@ if not valid then
 elseif HDR_FORMATS[s.currentFormat] then
 	print("[shot-thread] skipping HDR monitor " .. s.uid .. " (grim hangs on 10-bit)")
 else
-	local data = grim.capture_native(s.uid, scale, timeout)
+	local ok, data = pcall(grim.capture_native, s.uid, shot_dir, scale, timeout)
+	if not ok then
+		print("[shot-thread] capture error for " .. s.uid .. ": " .. tostring(data))
+		data = nil
+	end
 	if data then
-		debug.log("thread: capture ok, pushing raw PPM for %s (%d bytes)", s.uid, #data)
+		debug.log("thread: capture ok for %s (%s)", s.uid, data.format)
 		channel:push({ type = "screenshot", uid = s.uid, data = data })
 	else
 		print("[shot-thread] capture failed for " .. s.uid)

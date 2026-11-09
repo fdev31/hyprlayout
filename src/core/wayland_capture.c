@@ -1,9 +1,23 @@
-/* wayland_capture.c - In-process Wayland screen capture
+/* wayland_capture.c - Wayland screen capture
  *
- * Implements ext-image-copy-capture-v1 + linux-dmabuf for zero-copy frame capture.
- * Compiled as a shared library, loaded via LuaJIT FFI.
+ * Implements ext-image-copy-capture-v1 with wlr-screencopy as a fallback
+ * protocol, and ext-foreign-toplevel capture for compositors that do not
+ * advertise a wl_output global (e.g. Umbriel).  The client allocates the
+ * capture buffer via wl_shm (memfd + mmap), which is the path proven to work
+ * on NVIDIA GPUs where the gbm/dmabuf path segfaults.
  *
- * Build: cc -shared -fPIC -O2 -o wayland_capture.so wayland_capture.c -lwayland-client -lpthread
+ * Built as a standalone executable (child process).
+ *
+ * Protocol (stdin/stdout):
+ *   child -> parent:  PROTOCOL <name>\n
+ *   child -> parent:  READY\n
+ *   parent -> child:  CAPTURE <output_name> [scale]\n
+ *   child -> parent:  OK <w> <h> <stride>\n<raw BGRA bytes>
+ *   child -> parent:  ERR <reason>\n
+ *   parent -> child:  QUIT\n
+ *
+ * If the child segfaults, the parent detects the broken pipe and falls back
+ * to the grim subprocess.  The next capture respawns a fresh child.
  */
 
 #define _GNU_SOURCE
@@ -12,366 +26,889 @@
 #include <string.h>
 #include <unistd.h>
 #include <poll.h>
-#include <pthread.h>
+#include <fcntl.h>
+#include <errno.h>
 #include <sys/mman.h>
+#include <linux/memfd.h>
 #include <wayland-client.h>
+#include <libdrm/drm_fourcc.h>
 
-/* ------------------------------------------------------------------
- * Protocol interface definitions (manual, no code generation)
- *
- * The types field in struct wl_message is `const struct wl_interface **`.
- * For each argument in the signature, there is a corresponding entry in
- * the types array: a pointer to the wl_interface for `o`/`n` args, or
- * NULL for primitive types (i, u, f, s, a, h).
- * ------------------------------------------------------------------ */
+#include "protocol/ext-image-copy-capture.h"
+#include "protocol/ext-image-capture-source.h"
+#include "protocol/wlr-screencopy.h"
+#include "protocol/ext-foreign-toplevel-list.h"
 
-/* linux_dmabuf_buffer (no object dependencies) */
-static const struct wl_interface *dmabuf_parameters_types[] = {
-    NULL, NULL, NULL, NULL, NULL, NULL, NULL  /* h u u u u u u */
-};
-static const struct wl_message linux_dmabuf_buffer_events[] = {
-    { "parameters", "huiiuuu", dmabuf_parameters_types },
-};
-static const struct wl_interface linux_dmabuf_buffer_interface = {
-    "linux_dmabuf_buffer", 1, 0, NULL, 1, linux_dmabuf_buffer_events
-};
+/* ---------------------------------------------------------------------------
+ * Globals
+ * ------------------------------------------------------------------------- */
 
-/* zxdg_toplevel_capture_v1 (depends on linux_dmabuf_buffer) */
-static const struct wl_interface *frame_buffer_types[] = {
-    &linux_dmabuf_buffer_interface,
-    NULL
-};
-static const struct wl_message zxdg_toplevel_capture_v1_events[] = {
-    { "buffer", "o", frame_buffer_types },
-    { "done", "", NULL },
-};
-static const struct wl_interface zxdg_toplevel_capture_v1_interface = {
-    "zxdg_toplevel_capture_v1", 1, 0, NULL, 2, zxdg_toplevel_capture_v1_events
+static struct wl_display *display = NULL;
+static struct wl_shm *shm = NULL;
+
+static struct ext_image_copy_capture_manager_v1 *capture_manager = NULL;
+static struct ext_output_image_capture_source_manager_v1 *source_manager = NULL;
+static struct zwlr_screencopy_manager_v1 *wlr_manager = NULL;
+
+static int use_ext = 0;
+static int use_wlr = 0;
+static int use_toplevel = 0;
+
+#define MAX_OUTPUTS 16
+
+struct output_info {
+	struct wl_output *output;
+	char name[256];
+	int name_set;
 };
 
-/* zxdg_output_v1 (depends on zxdg_toplevel_capture_v1) */
-static const struct wl_interface *capture_frame_types[] = {
-    &zxdg_toplevel_capture_v1_interface,
-    NULL
-};
-static const struct wl_message zxdg_output_v1_methods[] = {
-    { "capture_frame", "n", capture_frame_types },
-    { "destroy", "", NULL },
-};
-static const struct wl_interface zxdg_output_v1_interface = {
-    "zxdg_output_v1", 1, 2, zxdg_output_v1_methods, 0, NULL
+static struct output_info outputs[MAX_OUTPUTS];
+static int output_count = 0;
+
+/* Foreign toplevel capture (no wl_output required). */
+static struct ext_foreign_toplevel_list_v1 *toplevel_list = NULL;
+static struct ext_foreign_toplevel_image_capture_source_manager_v1 *toplevel_source_manager = NULL;
+
+#define MAX_TOPLEVELS 64
+static struct ext_foreign_toplevel_handle_v1 *toplevels[MAX_TOPLEVELS];
+static int toplevel_count = 0;
+
+/* Capture state (shared between listener callbacks and the capture flow). */
+struct cap_state {
+	int session_done;
+	int frame_ready;
+	int frame_failed;
+	uint32_t format;      /* dmabuf format (DRM fourcc), from dmabuf-format event */
+	uint32_t shm_format;  /* wl_shm.format value, from shm-format / buffer event */
+	int shm_format_set;
+	uint32_t width, height;
+	int32_t stride;
+	struct wl_buffer *buffer;
+	void *map;            /* mmap'd SHM pixels */
+	size_t map_size;
+	int fd;
+	char err[256];
 };
 
-/* ext_image_capture_v1 (depends on wl_output and zxdg_output_v1) */
-static const struct wl_interface *create_output_types[] = {
-    &wl_output_interface,
-    &zxdg_output_v1_interface,
-    NULL
-};
-static const struct wl_message ext_image_capture_v1_methods[] = {
-    { "create_output", "on", create_output_types },
-};
-static const struct wl_interface ext_image_capture_v1_interface = {
-    "ext_image_capture_v1", 1, 1, ext_image_capture_v1_methods, 0, NULL
-};
+static struct cap_state cap;
 
-/* ------------------------------------------------------------------
- * Global state
- * ------------------------------------------------------------------ */
+/* Forward declaration. */
+static int dispatch_timeout(int ms);
 
-static struct wl_display  *g_display     = NULL;
-static struct wl_registry  *g_registry    = NULL;
-static struct wl_proxy     *g_capture_v1  = NULL;
-static struct wl_output    *g_output      = NULL;
-static int                  g_initialized = 0;
-static pthread_mutex_t      g_capture_mutex = PTHREAD_MUTEX_INITIALIZER;
+/* ---------------------------------------------------------------------------
+ * Listener callbacks
+ * ------------------------------------------------------------------------- */
 
-/* Per-capture frame state */
-static int    g_fd         = -1;
-static int    g_width      = 0;
-static int    g_height     = 0;
-static int    g_stride     = 0;
-static int    g_format     = 0;
-static void  *g_map        = NULL;
-static size_t g_map_size   = 0;
-static int    g_frame_done = 0;
-
-/* ------------------------------------------------------------------
- * Wayland event listeners
- * ------------------------------------------------------------------ */
-
-static void registry_global(void *data, struct wl_registry *reg,
-                             uint32_t name, const char *interface, uint32_t version)
+static void output_name(void *data, struct wl_output *output, const char *name)
 {
-    (void)data; (void)version;
-    if (strcmp(interface, "ext_image_capture_v1") == 0) {
-        g_capture_v1 = (struct wl_proxy *)wl_registry_bind(reg, name,
-                                         &ext_image_capture_v1_interface, 1);
-    } else if (strcmp(interface, "wl_output") == 0) {
-        if (!g_output) {
-            g_output = (struct wl_output *)wl_registry_bind(reg, name,
-                                                              &wl_output_interface, 2);
-        }
-    }
-}
-
-static const struct wl_registry_listener registry_listener = {
-    .global        = registry_global,
-    .global_remove = NULL,
-};
-
-static void output_geometry(void *data, struct wl_output *out,
-                            int32_t x, int32_t y, int32_t w, int32_t h,
-                            int32_t subpixel, const char *make, const char *model,
-                            int32_t transform)
-{
-    (void)data; (void)out; (void)x; (void)y; (void)w; (void)h;
-    (void)subpixel; (void)make; (void)model; (void)transform;
-}
-
-static void output_mode(void *data, struct wl_output *out,
-                        uint32_t flags, int32_t w, int32_t h,
-                        int32_t refresh)
-{
-    (void)data; (void)out; (void)flags; (void)w; (void)h;
-    (void)refresh;
-}
-
-static void output_done(void *data, struct wl_output *out)
-{
-    (void)data; (void)out;
+	struct output_info *info = data;
+	(void)output;
+	if (name) {
+		strncpy(info->name, name, sizeof(info->name) - 1);
+		info->name_set = 1;
+	}
 }
 
 static const struct wl_output_listener output_listener = {
-    .geometry    = output_geometry,
-    .mode        = output_mode,
-    .done        = output_done,
-    .scale       = NULL,
-    .name        = NULL,
-    .description = NULL,
+	.name = output_name,
 };
 
-/* Custom listener structs for our protocol objects.
- * wl_proxy_add_listener expects `void (**)(void)` as the implementation
- * array, so we cast our listener structs to that type (same pattern
- * used by the generated protocol wrappers). */
-struct frame_listener {
-    void (*buffer)(void *data, struct wl_proxy *frame, struct wl_proxy *buffer);
-    void (*done)(void *data, struct wl_proxy *frame);
+/* --- ext-foreign-toplevel-list listener --- */
+
+static void toplevel_new(void *data,
+			 struct ext_foreign_toplevel_list_v1 *list,
+			 struct ext_foreign_toplevel_handle_v1 *toplevel)
+{
+	(void)data; (void)list;
+	if (toplevel_count < MAX_TOPLEVELS)
+		toplevels[toplevel_count++] = toplevel;
+}
+
+static void toplevel_list_finished(void *data,
+				   struct ext_foreign_toplevel_list_v1 *list)
+{
+	(void)data; (void)list;
+}
+
+static const struct ext_foreign_toplevel_list_v1_listener toplevel_list_listener = {
+	.toplevel = toplevel_new,
+	.finished = toplevel_list_finished,
 };
 
-struct dmabuf_listener {
-    void (*parameters)(void *data, struct wl_proxy *buffer,
-                        int32_t fd, uint32_t width, uint32_t height,
-                        uint32_t format, uint32_t offset,
-                        uint32_t stride, uint32_t plane_idx);
+/* --- ext-image-copy-capture session listener ---
+ *
+ * The session advertises both dmabuf and shm constraints.  We use the shm
+ * path; the shm-format event carries a wl_shm.format value (0 = ARGB8888,
+ * 1 = XRGB8888, otherwise a DRM fourcc).
+ */
+
+static void session_buffer_size(void *data,
+				struct ext_image_copy_capture_session_v1 *session,
+				uint32_t width, uint32_t height)
+{
+	(void)data; (void)session;
+	cap.width = width;
+	cap.height = height;
+}
+
+static void session_dmabuf_format(void *data,
+				  struct ext_image_copy_capture_session_v1 *session,
+				  uint32_t format, struct wl_array *modifiers)
+{
+	(void)data; (void)session; (void)modifiers;
+	cap.format = format;
+}
+
+static void session_shm_format(void *data,
+			       struct ext_image_copy_capture_session_v1 *session,
+			       uint32_t format)
+{
+	(void)data; (void)session;
+	cap.shm_format = format;
+	cap.shm_format_set = 1;
+}
+
+static void session_dmabuf_device(void *data,
+				  struct ext_image_copy_capture_session_v1 *session,
+				  struct wl_array *device)
+{
+	(void)data; (void)session; (void)device;
+}
+
+static void session_done(void *data,
+			 struct ext_image_copy_capture_session_v1 *session)
+{
+	(void)data; (void)session;
+	cap.session_done = 1;
+}
+
+static void session_stopped(void *data,
+			    struct ext_image_copy_capture_session_v1 *session)
+{
+	(void)data; (void)session;
+	cap.frame_failed = 1;
+	snprintf(cap.err, sizeof(cap.err), "session stopped");
+}
+
+static const struct ext_image_copy_capture_session_v1_listener session_listener = {
+	.buffer_size = session_buffer_size,
+	.shm_format = session_shm_format,
+	.dmabuf_device = session_dmabuf_device,
+	.dmabuf_format = session_dmabuf_format,
+	.done = session_done,
+	.stopped = session_stopped,
 };
 
-static void dmabuf_parameters(void *data, struct wl_proxy *buffer,
-                               int32_t fd, uint32_t width, uint32_t height,
-                               uint32_t format, uint32_t offset,
-                               uint32_t stride, uint32_t plane_idx)
+/* --- ext-image-copy-capture frame listener --- */
+
+static void frame_transform(void *data,
+			    struct ext_image_copy_capture_frame_v1 *frame,
+			    uint32_t transform)
 {
-    (void)data; (void)buffer; (void)offset; (void)plane_idx;
-    g_fd     = fd;
-    g_width  = (int)width;
-    g_height = (int)height;
-    g_stride = (int)stride;
-    g_format = (int)format;
+	(void)data; (void)frame; (void)transform;
 }
 
-static const struct dmabuf_listener dmabuf_buffer_listener = {
-    .parameters = dmabuf_parameters,
+static void frame_damage(void *data,
+			 struct ext_image_copy_capture_frame_v1 *frame,
+			 int32_t x, int32_t y, int32_t width, int32_t height)
+{
+	(void)data; (void)frame; (void)x; (void)y; (void)width; (void)height;
+}
+
+static void frame_presentation_time(void *data,
+				    struct ext_image_copy_capture_frame_v1 *frame,
+				    uint32_t tv_sec_hi, uint32_t tv_sec_lo, uint32_t tv_nsec)
+{
+	(void)data; (void)frame; (void)tv_sec_hi; (void)tv_sec_lo; (void)tv_nsec;
+}
+
+static void frame_ready(void *data,
+			struct ext_image_copy_capture_frame_v1 *frame)
+{
+	(void)data; (void)frame;
+	cap.frame_ready = 1;
+}
+
+static void frame_failed(void *data,
+			 struct ext_image_copy_capture_frame_v1 *frame,
+			 uint32_t reason)
+{
+	(void)data; (void)frame; (void)reason;
+	cap.frame_failed = 1;
+	snprintf(cap.err, sizeof(cap.err), "frame capture failed");
+}
+
+static const struct ext_image_copy_capture_frame_v1_listener frame_listener = {
+	.transform = frame_transform,
+	.damage = frame_damage,
+	.presentation_time = frame_presentation_time,
+	.ready = frame_ready,
+	.failed = frame_failed,
 };
 
-static void frame_buffer(void *data, struct wl_proxy *frame,
-                          struct wl_proxy *buffer)
+/* --- wlr-screencopy frame listener ---
+ *
+ * The compositor sends either linux_dmabuf (dmabuf path) or buffer (shm path).
+ * We use the shm path; the buffer event carries a wl_shm.format value plus
+ * the stride.
+ */
+
+static void wlr_frame_linux_dmabuf(void *data,
+				   struct zwlr_screencopy_frame_v1 *frame,
+				   uint32_t format,
+				   uint32_t width, uint32_t height)
 {
-    (void)data; (void)frame;
-    wl_proxy_add_listener(buffer, (void (**)(void)) &dmabuf_buffer_listener, NULL);
+	(void)data; (void)frame;
+	cap.format = format;
+	cap.width = width;
+	cap.height = height;
+	cap.session_done = 1;
 }
 
-static void frame_done(void *data, struct wl_proxy *frame)
+static void wlr_frame_buffer(void *data,
+			     struct zwlr_screencopy_frame_v1 *frame,
+			     uint32_t format,
+			     uint32_t width, uint32_t height,
+			     uint32_t stride)
 {
-    (void)data; (void)frame;
-    g_frame_done = 1;
+	(void)data; (void)frame;
+	cap.shm_format = format;
+	cap.shm_format_set = 1;
+	cap.width = width;
+	cap.height = height;
+	cap.stride = (int32_t)stride;
+	cap.session_done = 1;
 }
 
-static const struct frame_listener frame_listener = {
-    .buffer = frame_buffer,
-    .done   = frame_done,
+static void wlr_frame_flags(void *data,
+			    struct zwlr_screencopy_frame_v1 *frame,
+			    uint32_t flags)
+{
+	(void)data; (void)frame; (void)flags;
+}
+
+static void wlr_frame_damage(void *data,
+			     struct zwlr_screencopy_frame_v1 *frame,
+			     uint32_t x, uint32_t y, uint32_t width, uint32_t height)
+{
+	(void)data; (void)frame; (void)x; (void)y; (void)width; (void)height;
+}
+
+static void wlr_frame_buffer_done(void *data,
+				   struct zwlr_screencopy_frame_v1 *frame)
+{
+	(void)data; (void)frame;
+}
+
+static void wlr_frame_ready(void *data,
+			    struct zwlr_screencopy_frame_v1 *frame,
+			    uint32_t tv_sec_hi, uint32_t tv_sec_lo, uint32_t tv_nsec)
+{
+	(void)data; (void)frame; (void)tv_sec_hi; (void)tv_sec_lo; (void)tv_nsec;
+	cap.frame_ready = 1;
+}
+
+static void wlr_frame_failed(void *data,
+			     struct zwlr_screencopy_frame_v1 *frame)
+{
+	(void)data; (void)frame;
+	cap.frame_failed = 1;
+	snprintf(cap.err, sizeof(cap.err), "wlr frame capture failed");
+}
+
+static const struct zwlr_screencopy_frame_v1_listener wlr_frame_listener = {
+	.buffer = wlr_frame_buffer,
+	.flags = wlr_frame_flags,
+	.ready = wlr_frame_ready,
+	.failed = wlr_frame_failed,
+	.damage = wlr_frame_damage,
+	.linux_dmabuf = wlr_frame_linux_dmabuf,
+	.buffer_done = wlr_frame_buffer_done,
 };
 
-/* ------------------------------------------------------------------
- * Public API
- * ------------------------------------------------------------------ */
+/* --- registry listener --- */
 
-int wlcap_init(void)
+static void registry_handle_global(void *data,
+				   struct wl_registry *registry,
+				   uint32_t name,
+				   const char *interface,
+				   uint32_t version)
 {
-    pthread_mutex_lock(&g_capture_mutex);
+	(void)data;
 
-    if (g_initialized) {
-        pthread_mutex_unlock(&g_capture_mutex);
-        return 0;
-    }
-
-    g_display = wl_display_connect(NULL);
-    if (!g_display) {
-        pthread_mutex_unlock(&g_capture_mutex);
-        return -1;
-    }
-
-    g_registry = wl_display_get_registry(g_display);
-    wl_registry_add_listener(g_registry, &registry_listener, NULL);
-
-    /* Dispatch to receive all globals */
-    wl_display_dispatch(g_display);
-    wl_display_flush(g_display);
-
-    /* Add output listener for the first output we found */
-    if (g_output) {
-        wl_output_add_listener(g_output, &output_listener, NULL);
-    }
-
-    if (!g_capture_v1) {
-        wl_display_disconnect(g_display);
-        g_display  = NULL;
-        g_registry = NULL;
-        pthread_mutex_unlock(&g_capture_mutex);
-        return -1;
-    }
-
-    g_initialized = 1;
-    pthread_mutex_unlock(&g_capture_mutex);
-    return 0;
+	if (strcmp(interface, "wl_shm") == 0) {
+		shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
+	} else if (strcmp(interface, "wl_output") == 0) {
+		if (output_count < MAX_OUTPUTS) {
+			struct wl_output *output =
+				wl_registry_bind(registry, name,
+					&wl_output_interface, 4);
+			int idx = output_count++;
+			outputs[idx].output = output;
+			outputs[idx].name[0] = '\0';
+			outputs[idx].name_set = 0;
+			wl_output_add_listener(output, &output_listener, &outputs[idx]);
+		}
+	} else if (strcmp(interface, "ext_image_copy_capture_manager_v1") == 0) {
+		capture_manager = wl_registry_bind(registry, name,
+			&ext_image_copy_capture_manager_v1_interface, 1);
+		use_ext = 1;
+	} else if (strcmp(interface, "ext_output_image_capture_source_manager_v1") == 0) {
+		source_manager = wl_registry_bind(registry, name,
+			&ext_output_image_capture_source_manager_v1_interface, 1);
+	} else if (strcmp(interface, "zwlr_screencopy_manager_v1") == 0) {
+		wlr_manager = wl_registry_bind(registry, name,
+			&zwlr_screencopy_manager_v1_interface, 3);
+		use_wlr = 1;
+	} else if (strcmp(interface, "ext_foreign_toplevel_list_v1") == 0) {
+		toplevel_list = wl_registry_bind(registry, name,
+			&ext_foreign_toplevel_list_v1_interface, 1);
+		ext_foreign_toplevel_list_v1_add_listener(toplevel_list,
+			&toplevel_list_listener, NULL);
+	} else if (strcmp(interface, "ext_foreign_toplevel_image_capture_source_manager_v1") == 0) {
+		toplevel_source_manager = wl_registry_bind(registry, name,
+			&ext_foreign_toplevel_image_capture_source_manager_v1_interface, 1);
+		use_toplevel = 1;
+	}
 }
 
-void wlcap_shutdown(void)
+static const struct wl_registry_listener registry_listener = {
+	.global = registry_handle_global,
+};
+
+/* ---------------------------------------------------------------------------
+ * Helpers
+ * ------------------------------------------------------------------------- */
+
+static struct output_info *find_output(const char *name)
 {
-    pthread_mutex_lock(&g_capture_mutex);
-
-    if (!g_initialized) {
-        pthread_mutex_unlock(&g_capture_mutex);
-        return;
-    }
-
-    if (g_output)
-        wl_output_destroy(g_output);
-    if (g_capture_v1)
-        wl_proxy_destroy(g_capture_v1);
-    if (g_registry)
-        wl_registry_destroy(g_registry);
-    if (g_display)
-        wl_display_disconnect(g_display);
-
-    g_display     = NULL;
-    g_registry    = NULL;
-    g_capture_v1  = NULL;
-    g_output      = NULL;
-    g_initialized = 0;
-
-    pthread_mutex_unlock(&g_capture_mutex);
+	for (int i = 0; i < output_count; i++) {
+		if (outputs[i].name_set && strcmp(outputs[i].name, name) == 0)
+			return &outputs[i];
+	}
+	return NULL;
 }
 
-int wlcap_capture(const char *output_name, int *w, int *h,
-                   int *stride, int *size, void **data)
+static void shm_cleanup(void)
 {
-    pthread_mutex_lock(&g_capture_mutex);
-
-    if (!g_initialized || !g_output) {
-        pthread_mutex_unlock(&g_capture_mutex);
-        return -1;
-    }
-
-    (void)output_name; /* TODO: multi-monitor selection */
-
-    /* Reset frame state */
-    g_fd         = -1;
-    g_width      = 0;
-    g_height     = 0;
-    g_stride     = 0;
-    g_format     = 0;
-    g_map        = NULL;
-    g_map_size   = 0;
-    g_frame_done = 0;
-
-    /* Create the zxdg_output for capture */
-    struct wl_proxy *zxdg_output = wl_proxy_marshal_constructor(
-        g_capture_v1, 0, &zxdg_output_v1_interface, g_output);
-    if (!zxdg_output) {
-        pthread_mutex_unlock(&g_capture_mutex);
-        return -1;
-    }
-
-    /* Request a frame capture */
-    struct wl_proxy *frame = wl_proxy_marshal_constructor(
-        zxdg_output, 0, &zxdg_toplevel_capture_v1_interface);
-    if (!frame) {
-        wl_proxy_destroy(zxdg_output);
-        pthread_mutex_unlock(&g_capture_mutex);
-        return -1;
-    }
-
-    /* Set up listener on the frame */
-    wl_proxy_add_listener(frame, (void (**)(void)) &frame_listener, NULL);
-
-    /* Flush and dispatch until we get the frame */
-    wl_display_flush(g_display);
-
-    /* Event loop with timeout (~5 seconds) */
-    struct pollfd pfd = { .fd = wl_display_get_fd(g_display), .events = POLLIN };
-    int max_iter = 500;
-
-    while (!g_frame_done && max_iter-- > 0) {
-        int ret = poll(&pfd, 1, 10);
-        if (ret > 0) {
-            wl_display_dispatch(g_display);
-        }
-        if (g_frame_done)
-            break;
-    }
-
-    if (!g_frame_done || g_fd < 0) {
-        wl_proxy_destroy(frame);
-        wl_proxy_destroy(zxdg_output);
-        pthread_mutex_unlock(&g_capture_mutex);
-        return -1;
-    }
-
-    /* Map the dmabuf into our address space (zero-copy) */
-    g_map_size = (size_t)g_stride * g_height;
-    g_map = mmap(NULL, g_map_size, PROT_READ, MAP_PRIVATE, g_fd, 0);
-    if (g_map == MAP_FAILED) {
-        close(g_fd);
-        g_fd = -1;
-        wl_proxy_destroy(frame);
-        wl_proxy_destroy(zxdg_output);
-        pthread_mutex_unlock(&g_capture_mutex);
-        return -1;
-    }
-
-    close(g_fd);
-    g_fd = -1;
-
-    wl_proxy_destroy(frame);
-    wl_proxy_destroy(zxdg_output);
-
-    /* Output results */
-    *w = g_width;
-    *h = g_height;
-    *stride = g_stride;
-    *size = (int)g_map_size;
-    *data = g_map;
-
-    pthread_mutex_unlock(&g_capture_mutex);
-    return 0;
+	if (cap.buffer) {
+		wl_buffer_destroy(cap.buffer);
+		cap.buffer = NULL;
+	}
+	if (cap.map) {
+		munmap(cap.map, cap.map_size);
+		cap.map = NULL;
+	}
+	if (cap.fd >= 0) {
+		close(cap.fd);
+		cap.fd = -1;
+	}
 }
 
-void wlcap_free(void *data)
+/*
+ * Allocate a wl_shm buffer backed by a memfd.  The compositor fills the
+ * mmap'd region with pixels in the given wl_shm.format.  Returns 0 on
+ * success, -1 on failure.  On success, cap.buffer / cap.map / cap.fd /
+ * cap.stride are set.
+ */
+static int shm_alloc(uint32_t format, uint32_t width, uint32_t height, int32_t stride)
 {
-    if (data && data != MAP_FAILED) {
-        munmap(data, g_map_size);
-    }
-    g_map      = NULL;
-    g_map_size = 0;
+	if (!shm)
+		return -1;
+
+	if (stride <= 0)
+		stride = (int32_t)width * 4;
+
+	int32_t size = stride * (int32_t)height;
+
+	int fd = memfd_create("hyprlayout-screenshot", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+	if (fd < 0)
+		return -1;
+
+	if (ftruncate(fd, size) != 0) {
+		close(fd);
+		return -1;
+	}
+
+	void *map = mmap(NULL, (size_t)size, PROT_READ | PROT_WRITE,
+			   MAP_SHARED, fd, 0);
+	if (map == MAP_FAILED) {
+		close(fd);
+		return -1;
+	}
+
+	struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, size);
+	struct wl_buffer *buffer = wl_shm_pool_create_buffer(
+		pool, 0, (int32_t)width, (int32_t)height, stride, format);
+	wl_shm_pool_destroy(pool);
+
+	if (!buffer) {
+		munmap(map, (size_t)size);
+		close(fd);
+		return -1;
+	}
+
+	cap.buffer = buffer;
+	cap.map = map;
+	cap.map_size = (size_t)size;
+	cap.fd = fd;
+	cap.stride = stride;
+
+	return 0;
+}
+
+/*
+ * Convert the source buffer (top-down, stride-padded) to tightly packed
+ * bottom-up BGRA rows (as expected by the 32-bit BMP body).  `format` is the
+ * wl_shm.format the compositor filled the buffer with.
+ *
+ *  - wl_shm ARGB8888 (0) / XRGB8888 (1): memory is B,G,R,A/x -> no swap.
+ *  - DRM ARGB8888 / XRGB8888 fourcc:    memory is B,G,R,A/x -> no swap.
+ *  - DRM XBGR8888 / ABGR8888 fourcc:    memory is R,G,B,A/x -> swap R and B.
+ */
+static void convert_to_bgra(const uint8_t *src, uint32_t format,
+			    uint32_t width, uint32_t height,
+			    int32_t stride, uint8_t *dst)
+{
+	int swap = (format == DRM_FORMAT_XBGR8888 || format == DRM_FORMAT_ABGR8888);
+
+	for (uint32_t y = 0; y < height; y++) {
+		const uint8_t *s = src + y * (size_t)stride;
+		uint8_t *d = dst + (height - 1 - y) * width * 4;
+
+		if (swap) {
+			for (uint32_t x = 0; x < width; x++) {
+				d[x * 4 + 0] = s[x * 4 + 2]; /* B */
+				d[x * 4 + 1] = s[x * 4 + 1]; /* G */
+				d[x * 4 + 2] = s[x * 4 + 0]; /* R */
+				d[x * 4 + 3] = s[x * 4 + 3]; /* A */
+			}
+		} else {
+			memcpy(d, s, width * 4);
+		}
+	}
+}
+
+static void emit_ok(uint32_t w, uint32_t h, const uint8_t *pixels, size_t len)
+{
+	printf("OK %u %u %zu\n", w, h, (size_t)w * 4);
+	fwrite(pixels, 1, len, stdout);
+	fflush(stdout);
+}
+
+static void emit_err(const char *reason)
+{
+	printf("ERR %s\n", reason);
+	fflush(stdout);
+}
+
+/* ---------------------------------------------------------------------------
+ * ext-image-copy-capture-v1 flow (full output)
+ * ------------------------------------------------------------------------- */
+
+static int run_capture_ext(const char *output_name)
+{
+	struct output_info *oi = find_output(output_name);
+	if (!oi) {
+		char msg[256];
+		snprintf(msg, sizeof(msg), "output not found: %s", output_name);
+		emit_err(msg);
+		return -1;
+	}
+
+	memset(&cap, 0, sizeof(cap));
+	cap.fd = -1;
+
+	/* 1. Create source and session. */
+	struct ext_image_capture_source_v1 *source =
+		ext_output_image_capture_source_manager_v1_create_source(
+			source_manager, oi->output);
+
+	struct ext_image_copy_capture_session_v1 *session =
+		ext_image_copy_capture_manager_v1_create_session(
+			capture_manager, source, 0);
+	ext_image_copy_capture_session_v1_add_listener(session, &session_listener, NULL);
+
+	/* 2. Dispatch until session constraints are received. */
+	for (int i = 0; i < 50 && !cap.session_done && !cap.frame_failed; i++)
+		if (dispatch_timeout(100) < 0)
+			break;
+
+	if (cap.frame_failed) {
+		emit_err(cap.err);
+		ext_image_copy_capture_session_v1_destroy(session);
+		ext_image_capture_source_v1_destroy(source);
+		return -1;
+	}
+
+	if (cap.width == 0 || cap.height == 0) {
+		emit_err("no buffer constraints received");
+		ext_image_copy_capture_session_v1_destroy(session);
+		ext_image_capture_source_v1_destroy(source);
+		return -1;
+	}
+
+	/* 3. Allocate SHM buffer (use the shm-format the compositor advertised). */
+	uint32_t format = cap.shm_format_set ? cap.shm_format : cap.format;
+	if (shm_alloc(format, cap.width, cap.height, 0) != 0) {
+		emit_err("shm buffer allocation failed");
+		ext_image_copy_capture_session_v1_destroy(session);
+		ext_image_capture_source_v1_destroy(source);
+		return -1;
+	}
+
+	/* 4. Create frame, attach buffer, capture. */
+	struct ext_image_copy_capture_frame_v1 *frame =
+		ext_image_copy_capture_session_v1_create_frame(session);
+	ext_image_copy_capture_frame_v1_add_listener(frame, &frame_listener, NULL);
+
+	ext_image_copy_capture_frame_v1_attach_buffer(frame, cap.buffer);
+	ext_image_copy_capture_frame_v1_damage_buffer(frame, 0, 0,
+		cap.width, cap.height);
+	ext_image_copy_capture_frame_v1_capture(frame);
+
+	for (int i = 0; i < 100 && !cap.frame_ready && !cap.frame_failed; i++)
+		if (dispatch_timeout(100) < 0)
+			break;
+
+	if (cap.frame_failed) {
+		emit_err(cap.err);
+		shm_cleanup();
+		ext_image_copy_capture_frame_v1_destroy(frame);
+		ext_image_copy_capture_session_v1_destroy(session);
+		ext_image_capture_source_v1_destroy(source);
+		return -1;
+	}
+
+	/* 5. Read pixels from the mmap'd SHM buffer. */
+	size_t pixel_bytes = (size_t)cap.width * cap.height * 4;
+	uint8_t *pixels = malloc(pixel_bytes);
+	if (!pixels) {
+		emit_err("malloc failed");
+		shm_cleanup();
+		ext_image_copy_capture_frame_v1_destroy(frame);
+		ext_image_copy_capture_session_v1_destroy(session);
+		ext_image_capture_source_v1_destroy(source);
+		return -1;
+	}
+
+	convert_to_bgra(cap.map, format, cap.width, cap.height,
+			cap.stride, pixels);
+
+	emit_ok(cap.width, cap.height, pixels, pixel_bytes);
+
+	free(pixels);
+	shm_cleanup();
+	ext_image_copy_capture_frame_v1_destroy(frame);
+	ext_image_copy_capture_session_v1_destroy(session);
+	ext_image_capture_source_v1_destroy(source);
+
+	return 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * wlr-screencopy flow (fallback, full output)
+ * ------------------------------------------------------------------------- */
+
+static int run_capture_wlr(const char *output_name)
+{
+	struct output_info *oi = find_output(output_name);
+	if (!oi) {
+		char msg[256];
+		snprintf(msg, sizeof(msg), "output not found: %s", output_name);
+		emit_err(msg);
+		return -1;
+	}
+
+	memset(&cap, 0, sizeof(cap));
+	cap.fd = -1;
+
+	/* 1. Create frame. */
+	struct zwlr_screencopy_frame_v1 *frame =
+		zwlr_screencopy_manager_v1_capture_output(
+			wlr_manager, 1, oi->output);
+	zwlr_screencopy_frame_v1_add_listener(frame, &wlr_frame_listener, NULL);
+
+	/* 2. Dispatch until the buffer (shm) or linux_dmabuf event arrives. */
+	for (int i = 0; i < 50 && !cap.session_done && !cap.frame_failed; i++)
+		if (dispatch_timeout(100) < 0)
+			break;
+
+	if (cap.frame_failed) {
+		emit_err(cap.err);
+		zwlr_screencopy_frame_v1_destroy(frame);
+		return -1;
+	}
+
+	if (cap.width == 0 || cap.height == 0) {
+		emit_err("no buffer constraints received");
+		zwlr_screencopy_frame_v1_destroy(frame);
+		return -1;
+	}
+
+	/* 3. Allocate SHM buffer (the buffer event carries the wl_shm.format). */
+	if (!cap.shm_format_set) {
+		emit_err("wlr compositor did not offer an shm buffer");
+		zwlr_screencopy_frame_v1_destroy(frame);
+		return -1;
+	}
+	if (shm_alloc(cap.shm_format, cap.width, cap.height, cap.stride) != 0) {
+		emit_err("shm buffer allocation failed");
+		zwlr_screencopy_frame_v1_destroy(frame);
+		return -1;
+	}
+
+	/* 4. Copy into the buffer. */
+	zwlr_screencopy_frame_v1_copy(frame, cap.buffer);
+
+	for (int i = 0; i < 100 && !cap.frame_ready && !cap.frame_failed; i++)
+		if (dispatch_timeout(100) < 0)
+			break;
+
+	if (cap.frame_failed) {
+		emit_err(cap.err);
+		shm_cleanup();
+		zwlr_screencopy_frame_v1_destroy(frame);
+		return -1;
+	}
+
+	/* 5. Read pixels from the mmap'd SHM buffer. */
+	size_t pixel_bytes = (size_t)cap.width * cap.height * 4;
+	uint8_t *pixels = malloc(pixel_bytes);
+	if (!pixels) {
+		emit_err("malloc failed");
+		shm_cleanup();
+		zwlr_screencopy_frame_v1_destroy(frame);
+		return -1;
+	}
+
+	convert_to_bgra(cap.map, cap.shm_format, cap.width, cap.height,
+			cap.stride, pixels);
+
+	emit_ok(cap.width, cap.height, pixels, pixel_bytes);
+
+	free(pixels);
+	shm_cleanup();
+	zwlr_screencopy_frame_v1_destroy(frame);
+
+	return 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * ext-foreign-toplevel capture flow (no wl_output required)
+ * ------------------------------------------------------------------------- */
+
+static int run_capture_toplevel(void)
+{
+	if (toplevel_count == 0) {
+		emit_err("no toplevels available");
+		return -1;
+	}
+
+	struct ext_foreign_toplevel_handle_v1 *toplevel = toplevels[0];
+
+	memset(&cap, 0, sizeof(cap));
+	cap.fd = -1;
+
+	/* 1. Create source from the toplevel handle. */
+	struct ext_image_capture_source_v1 *source =
+		ext_foreign_toplevel_image_capture_source_manager_v1_create_source(
+			toplevel_source_manager, toplevel);
+
+	struct ext_image_copy_capture_session_v1 *session =
+		ext_image_copy_capture_manager_v1_create_session(
+			capture_manager, source, 0);
+	ext_image_copy_capture_session_v1_add_listener(session, &session_listener, NULL);
+
+	/* 2. Dispatch until session constraints are received. */
+	for (int i = 0; i < 50 && !cap.session_done && !cap.frame_failed; i++)
+		if (dispatch_timeout(100) < 0)
+			break;
+
+	if (cap.frame_failed) {
+		emit_err(cap.err);
+		ext_image_copy_capture_session_v1_destroy(session);
+		ext_image_capture_source_v1_destroy(source);
+		return -1;
+	}
+
+	if (cap.width == 0 || cap.height == 0) {
+		emit_err("no buffer constraints received");
+		ext_image_copy_capture_session_v1_destroy(session);
+		ext_image_capture_source_v1_destroy(source);
+		return -1;
+	}
+
+	/* 3. Allocate SHM buffer (use the shm-format the compositor advertised). */
+	uint32_t format = cap.shm_format_set ? cap.shm_format : cap.format;
+	if (shm_alloc(format, cap.width, cap.height, 0) != 0) {
+		emit_err("shm buffer allocation failed");
+		ext_image_copy_capture_session_v1_destroy(session);
+		ext_image_capture_source_v1_destroy(source);
+		return -1;
+	}
+
+	/* 4. Create frame, attach buffer, capture. */
+	struct ext_image_copy_capture_frame_v1 *frame =
+		ext_image_copy_capture_session_v1_create_frame(session);
+	ext_image_copy_capture_frame_v1_add_listener(frame, &frame_listener, NULL);
+
+	ext_image_copy_capture_frame_v1_attach_buffer(frame, cap.buffer);
+	ext_image_copy_capture_frame_v1_damage_buffer(frame, 0, 0,
+		cap.width, cap.height);
+	ext_image_copy_capture_frame_v1_capture(frame);
+
+	for (int i = 0; i < 100 && !cap.frame_ready && !cap.frame_failed; i++)
+		if (dispatch_timeout(100) < 0)
+			break;
+
+	if (cap.frame_failed) {
+		emit_err(cap.err);
+		shm_cleanup();
+		ext_image_copy_capture_frame_v1_destroy(frame);
+		ext_image_copy_capture_session_v1_destroy(session);
+		ext_image_capture_source_v1_destroy(source);
+		return -1;
+	}
+
+	/* 5. Read pixels from the mmap'd SHM buffer. */
+	size_t pixel_bytes = (size_t)cap.width * cap.height * 4;
+	uint8_t *pixels = malloc(pixel_bytes);
+	if (!pixels) {
+		emit_err("malloc failed");
+		shm_cleanup();
+		ext_image_copy_capture_frame_v1_destroy(frame);
+		ext_image_copy_capture_session_v1_destroy(session);
+		ext_image_capture_source_v1_destroy(source);
+		return -1;
+	}
+
+	convert_to_bgra(cap.map, format, cap.width, cap.height,
+			cap.stride, pixels);
+
+	emit_ok(cap.width, cap.height, pixels, pixel_bytes);
+
+	free(pixels);
+	shm_cleanup();
+	ext_image_copy_capture_frame_v1_destroy(frame);
+	ext_image_copy_capture_session_v1_destroy(session);
+	ext_image_capture_source_v1_destroy(source);
+
+	return 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Init and main
+ * ------------------------------------------------------------------------- */
+
+/* Dispatch with a timeout (ms). Returns 0 on success, -1 on timeout.
+ *
+ * Uses the built-in wl_display_dispatch_timeout, which correctly performs
+ * the prepare-read / read-events / dispatch-pending dance internally and
+ * waits up to the timeout without blocking forever. */
+static int dispatch_timeout(int ms)
+{
+	struct timespec ts = {
+		.tv_sec = ms / 1000,
+		.tv_nsec = (long)(ms % 1000) * 1000000L,
+	};
+	return wl_display_dispatch_timeout(display, &ts);
+}
+
+static int init_display(void)
+{
+	display = wl_display_connect(NULL);
+	if (!display)
+		return -1;
+
+	/* Non-blocking socket so wl_display_flush (write) can never block. */
+	int fd = wl_display_get_fd(display);
+	fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
+
+	struct wl_registry *registry = wl_display_get_registry(display);
+	wl_registry_add_listener(registry, &registry_listener, NULL);
+
+	/* Dispatch to receive globals and initial events. */
+	wl_display_dispatch(display);
+
+	/* Dispatch again to receive wl_output name / toplevel events (with timeout). */
+	for (int i = 0; i < 10; i++) {
+		dispatch_timeout(200);
+	}
+
+	if (!shm)
+		return -1;
+	if (!use_ext && !use_wlr && !use_toplevel)
+		return -1;
+
+	return 0;
+}
+
+int main(void)
+{
+	if (init_display() != 0) {
+		printf("ERR no capture protocol available\n");
+		fflush(stdout);
+		return 1;
+	}
+
+	/*
+	 * Choose the capture protocol.  Full-output protocols (ext-image-copy-
+	 * capture and wlr-screencopy) require a wl_output global, which some
+	 * compositors (e.g. Umbriel) do not advertise.  The foreign-toplevel
+	 * protocol captures a toplevel window and needs no wl_output.
+	 */
+	int protocol = 0; /* 1=ext, 2=wlr, 3=toplevel */
+	if (use_ext && output_count > 0)
+		protocol = 1;
+	else if (use_wlr && output_count > 0)
+		protocol = 2;
+	else if (use_toplevel && toplevel_list != NULL && capture_manager != NULL)
+		protocol = 3;
+
+	if (protocol == 0) {
+		printf("ERR no usable capture protocol\n");
+		fflush(stdout);
+		return 1;
+	}
+
+	/* Print which protocol is active (visible without HYPRDEBUG). */
+	if (protocol == 1)
+		printf("PROTOCOL ext-image-copy-capture-v1\n");
+	else if (protocol == 2)
+		printf("PROTOCOL wlr-screencopy\n");
+	else
+		printf("PROTOCOL ext-foreign-toplevel\n");
+	fflush(stdout);
+
+	printf("READY\n");
+	fflush(stdout);
+
+	char line[1024];
+	while (fgets(line, sizeof(line), stdin)) {
+		/* Strip trailing newline. */
+		size_t len = strlen(line);
+		while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
+			line[--len] = '\0';
+
+		if (strncmp(line, "CAPTURE ", 8) == 0) {
+			char output_name[256] = {0};
+			double scale = 1.0;
+			if (sscanf(line + 8, "%255s %lf", output_name, &scale) >= 1) {
+				(void)scale; /* software downsample is TODO */
+				if (protocol == 1)
+					run_capture_ext(output_name);
+				else if (protocol == 2)
+					run_capture_wlr(output_name);
+				else if (protocol == 3)
+					run_capture_toplevel();
+				else
+					emit_err("no capture protocol available");
+			}
+		} else if (strncmp(line, "QUIT", 4) == 0) {
+			break;
+		}
+	}
+
+	wl_display_disconnect(display);
+	return 0;
 }
