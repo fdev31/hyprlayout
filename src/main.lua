@@ -545,6 +545,28 @@ local function handle_cli()
 		return true
 	end
 
+	-- --screenshot <native|grim|none> is a runtime flag (not a one-shot
+	-- CLI command), so handle it here and fall through to the GUI.
+	-- Supports both "--screenshot=grim" and "--screenshot grim".
+	if a1:sub(1, 12) == "--screenshot" then
+		local v = a1:sub(14) -- value after the "="
+		if v == "" and arg then
+			-- Value is the next argument
+			if arg[1] and is_path(arg[1]) then
+				v = arg[3] or ""
+			else
+				v = arg[2] or ""
+			end
+		end
+		if v == "native" or v == "grim" or v == "none" then
+			screenshot_backend = v
+		else
+			print("Invalid --screenshot value: " .. v .. " (use native, grim, or none)")
+			screenshot_backend = "none"
+		end
+		return false
+	end
+
 	if a1:sub(1, 1) == "-" then
 		print([[With no options, launches the GUI
 Options:
@@ -605,22 +627,6 @@ function love.load()
 			if f2 then
 				f2:close()
 				C_SOURCE_PATH = p2
-			end
-		end
-	end
-
-	-- Parse --screenshot <native|grim|none> from the command line.
-	if arg then
-		for i, a in ipairs(arg) do
-			if a == "--screenshot" and arg[i + 1] then
-				local v = arg[i + 1]
-				if v == "native" or v == "grim" or v == "none" then
-					screenshot_backend = v
-				else
-					print("Invalid --screenshot value: " .. v .. " (use native, grim, or none)")
-					screenshot_backend = "none"
-				end
-				break
 			end
 		end
 	end
