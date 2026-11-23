@@ -2,7 +2,7 @@
 
 Successor of [wlr-layout-ui](https://github.com/fdev31/wlr-layout-ui) aka wlrlui.
 
-A LÖVE 11.5 GUI for arranging and configuring Hyprland monitor layouts. Drag
+A LÖVE 11.5 GUI for arranging and configuring Hyprland monitor layouts, it supports umbriel and also provide a generic wayland backend that should work on most wayland environments. Drag
 screens into position, tune resolution / scale / rotation / HDR per output,
 then apply the layout with `hyprctl`. Layouts can be saved and recalled as
 named profiles.
